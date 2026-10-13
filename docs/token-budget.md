@@ -19,7 +19,8 @@ quantized (Q8_0) build; and **there is no headless mode**, so there is no CI loo
 ## Why this pack is skills, not a big `AGENTS.md`
 
 - A skill's **name and description** are the only always-loaded cost (order of 100 tokens each).
-  Its body loads **only when activated**. 25 skills is a small standing cost.
+  Its body loads **only when activated**. 39 skills is a small standing cost, and the
+  domains you never touch are dead weight until their descriptions match a request.
 - A long `knowledge.md` is paid on **every single turn**. A 2026 study found LLM-generated
   repo-context files slightly *reduced* success while raising inference cost by ~20%; developer-written
   ones helped only marginally. So: keep `knowledge.md` to facts the agent cannot infer, and push every

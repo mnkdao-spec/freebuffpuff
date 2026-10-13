@@ -19,8 +19,8 @@ allowed to touch?`
 - [ ] If it does not, your `<ANGLE BRACKETS>` may still be unfilled — those are yours to fill.
 
 ## 2. Do skills load, and does one auto-select?
-Type: `/skill:` — the autocomplete should list 25 skills (or however many you installed).
-- [ ] The list appears.
+Type: `/skill:` — the autocomplete should list 39 skills (or however many you installed).
+- [ ] The list appears (39 skills, or however many you installed).
 Then run the real test, which is *automatic* selection:
 `A Lidarr album is stuck in the queue and will not import. Diagnose it, read-only.`
 - [ ] It uses `music-lidarr-match-doctor` (or at least mentions the release-group MBID trap and the
@@ -51,6 +51,29 @@ curl -s -H "X-API-Key: $SLSKD_API_KEY"  http://localhost:5030/api/v0/server | he
       `.agents/types/`), restart, then type `@` — the display names `Repo Cartographer`, `Verifier`
       and `Library Auditor` should autocomplete. **This is the tier that was not verifiable in the
       sandbox.** If they do not appear, delete `.agents/*.ts`; you lose only this tier.
+
+## 6. Do the Proxmox scripts work on your host? (run on the PVE host, or over SSH)
+```bash
+ssh root@pve 'bash -s' < install.sh   # not needed - the scripts are standalone:
+bash .agents/skills/proxmox-stack-map/scripts/pve-doctor.sh
+bash .agents/skills/proxmox-guest-placement/scripts/lxc-audit.sh <your CT id> --paths /data/downloads:/data/media
+```
+- [ ] `pve-doctor.sh` produced findings (not a crash) and the storage/guest lines match reality.
+- [ ] If it reports "nothing readable", note which endpoint returned nothing - the `pvesh get`
+      output shape is the one thing a shimmed fixture cannot confirm.
+- [ ] `lxc-audit.sh --paths` agreed with what the *containers* see (`stat -c '%d'` inside them).
+- [ ] `python3` exists on the host, or you set `PYTHON=`.
+
+## 7. Does the website audit match your build? (run in Git Bash/PowerShell is fine via Git Bash)
+```bash
+npm ci && npm run build
+bash .agents/skills/web-perf-a11y/scripts/site-audit.sh dist --strict
+bash .agents/skills/web-perf-a11y/scripts/site-audit.sh dist --url https://<your domain>
+```
+- [ ] No false positive you disagree with (tell me which - especially any broken-internal-link
+      report, since relative links are resolved against the output root).
+- [ ] `live:hash` matched the deployed page (or flagged a genuinely stale deploy).
+- [ ] The JS budget default (300 KB gzipped) is right for your site.
 
 ## What to send back
 Anything that failed, plus:

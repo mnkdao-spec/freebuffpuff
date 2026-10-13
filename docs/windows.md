@@ -35,7 +35,7 @@ If you want both surfaces, install a second copy — `./install.sh --project .` 
 From **Git Bash**:
 ```bash
 cd /c/Users/you/homelab          # or your project repo
-bash ./install.sh --verify       # 25 skills, 0 invalid
+bash ./install.sh --verify       # 39 skills, 0 invalid
 bash ./install.sh --project . --mcp local-readonly
 ```
 From **PowerShell**, if you prefer to stay there:
@@ -92,7 +92,7 @@ LAN services. Windows Firewall may prompt on first run — allowing it is fine, 
 ## Smoke test on Windows
 
 ```bash
-bash ./install.sh --verify                                   # 25 skills, 0 invalid
+bash ./install.sh --verify                                   # 39 skills, 0 invalid
 ls .agents/skills | wc -l                                    # 25
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   | node "$(python -c "import json;print(json.load(open('.agents/mcp.json'))['mcpServers']['localReadonly']['args'][0])")" \

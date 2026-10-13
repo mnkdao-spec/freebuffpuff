@@ -1,12 +1,18 @@
 # Custom agents (opt-in, Tier 3)
 
-Three TypeScript agent definitions, all **read-only by construction** (no write tools at all):
+Five TypeScript agent definitions, all **read-only by construction** (no write tools at all):
 
 | Agent | Purpose | Write tools |
 |---|---|---|
 | `repo-cartographer` | map a stack before you change it: services, ports, mounts, config ownership | none |
 | `verifier` | adversarial read-only review of a change, against its acceptance criteria | none |
 | `library-auditor` | read-only health check of the music stack and library | none |
+| `proxmox-auditor` | read-only audit of the Proxmox host and guests: inventory, mounts that are not backed up, privilege/device findings, repo hygiene, upgrade risk | none |
+| `site-qa` | read-only QA of the website build and deployment: builds the artefact, audits metadata/structured data/links/weight, verifies the live page against the build | none |
+
+`site-qa` and `proxmox-auditor` may run the project's own build/test commands and the pack's
+read-only scripts (a build writes to its output directory; neither edits source or touches the
+hypervisor).
 
 ## Install
 ```bash
@@ -16,6 +22,23 @@ cp agents/types/agent-definition.d.ts .agents/types/
 ```
 Then address them in the TUI with `@` and their display name (e.g. `@Verifier`). Freebuff has no
 `--agent` flag — that is Codebuff-only.
+
+## Checking the definitions load
+
+Node strips the TypeScript types on import, so this actually executes each definition and validates
+the fields an agent needs. (`node --check` does **not** strip types and will reject `.ts` files -
+it is the wrong tool here; so is relying on the `.d.ts`, which only helps an editor.)
+
+```bash
+for f in .agents/*.ts; do node --input-type=module -e "
+const m = await import('./$f'); const d = m.default;
+const bad = [];
+if (!d.id) bad.push('id');
+if (!Array.isArray(d.toolNames) || !d.toolNames.length) bad.push('toolNames');
+for (const w of ['write_file','str_replace','apply_patch']) if ((d.toolNames||[]).includes(w)) bad.push('WRITE TOOL: '+w);
+console.log((bad.length ? 'INVALID ' + bad.join(',') : 'OK') + '  $f');
+"; done
+```
 
 ## What was verified, and what was not
 

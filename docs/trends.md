@@ -146,3 +146,21 @@ small descriptions, no config sprawl, and no always-on layer.
 Where evidence was thin — notably whether Freebuff loads custom `.ts` agents, and Freebuff Desktop
 parity — the pack ships the feature as **opt-in and labelled**, and `probe/USER-CHECKLIST.md` exists
 so you can settle it on your own machine in ten minutes.
+
+## 9. Two domains added after the first build (Proxmox + the project's website)
+
+The same survey was extended in two directions once the homelab context was explicit: the
+**hypervisor** everything runs on, and the **public face** of the project.
+
+- **Proxmox**: the recurring theme is that the failure mode is structural, not exotic - a bind
+  mount that the hypervisor will never back up, an unmounted storage that silently redirects writes
+  to `/`, a nested-Docker breakage caused by a host package update. The pack's answer is two
+  read-only auditors and skills that quote the documented rules. Details and sources:
+  [`proxmox-notes.md`](proxmox-notes.md).
+- **The website**: static-first + typed content collections remains the right shape for a content
+  site, and the music-specific work is mostly *honesty* - structured data does not guarantee a rich
+  result, valid markup is not a ranking, and the release that "did not appear" is nearly always a
+  cached HTML page or a non-atomic deploy. Details and sources: [`web-notes.md`](web-notes.md).
+
+Neither domain changed the pack's stance: read-only by default, secrets never in prompts or build
+output, and every claim carries the command that produced it.

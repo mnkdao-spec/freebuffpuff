@@ -60,6 +60,21 @@ Credentials live in `<EDIT .env>`. Never print them. They are in `.gitignore` an
 - State what you did NOT verify. "It should work" is not a result.
 - Cite the file and line for every claim about config.
 
+## The hypervisor (fill in: read `.agents/skills/proxmox-stack-map/SKILL.md`)
+- PVE host `<EDIT pve.lan>`; Docker guests: `<EDIT 120 music-stack (LXC, unprivileged, nesting+keyctl)>`,
+  `<EDIT 200 docker-vm>`. **Never install anything on the PVE host.**
+- Read-only host check: `bash .agents/skills/proxmox-stack-map/scripts/pve-doctor.sh`
+- One guest: `bash .agents/skills/proxmox-guest-placement/scripts/lxc-audit.sh <id> --paths /data/downloads:/data/media`
+- What is NOT backed up: `<EDIT e.g. /tank/media is a bind mount - not in vzdump; PBS covers CT roots>`
+- Guest inventories live in `<EDIT .agents/ops/homelab-inventory.md>`. Update it when ids change.
+
+## The website
+- Repo `<EDIT>` · build `<EDIT npm run build>` · output `<EDIT dist/>` · served by `<EDIT Caddy in LXC 121>`
+- Pre-ship check: `bash .agents/skills/web-perf-a11y/scripts/site-audit.sh dist --strict`
+- Live check: `... --url https://<EDIT domain>` (compares served bytes with the build)
+- Deploy is atomic: new release dir + symlink swap. Never `rsync --delete` into the live directory.
+- Public surface: **the website only.** Navidrome, *arr UIs, slskd and Proxmox stay on the LAN/tailnet.
+
 ## Where the procedures live
 `.agents/skills/` — run `/skill:` in the TUI to list them. Notable:
 - `music-stack-map`, `music-lidarr-match-doctor`, `music-path-and-hardlink-doctor`

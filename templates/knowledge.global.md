@@ -10,3 +10,11 @@
 - Prefer plain CLIs (`curl`, `jq`, `ffprobe`, `flac -t`, `docker compose config -q`,
   `beet --pretend`) over new dependencies or new MCP servers.
 - Domain skills for my homelab and notes live in `~/.agents/skills/` — use them when relevant.
+
+## Global notes: homelab + website
+- This homelab runs on **Proxmox VE** (single box). Services live in guests, never on the
+  hypervisor. Read-only audits: `.agents/skills/proxmox-stack-map/scripts/pve-doctor.sh`.
+- The music project's website is a **static build** served by Caddy. Pre-ship check:
+  `.agents/skills/web-perf-a11y/scripts/site-audit.sh dist --strict`.
+- Unless told otherwise, assume **read-only**: no hypervisor changes, no service restarts, no
+  deploys. Propose the exact command and the rollback, then stop.
