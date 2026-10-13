@@ -12,6 +12,30 @@ NAME_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
+
+# Backslashes are valid in a Windows path but not in JSON: "C:\Users\me" would be an
+# invalid escape. Node accepts forward slashes on Windows, so normalise for mcp.json.
+norm_path() { printf '%s' "${1//\\//}"; }
+
+# .gitattributes forces LF, but a checkout from a fork or an unzip on Windows can reintroduce
+# CRLF, which turns every script into "\r: command not found". Fail loudly instead.
+check_line_endings() {
+  local bad=""
+  while IFS= read -r -d '' f; do
+    case "$f" in *.sh|*.js) ;; *) continue ;; esac
+    if head -c 4096 "$f" | grep -qU $'\r'; then bad="${bad}
+  ${f}"; fi
+  done < <(find "$PACK_DIR/skills" "$PACK_DIR/mcp" -type f \( -name '*.sh' -o -name '*.js' \) -print0)
+  if [ -n "$bad" ]; then
+    say "error: these files have CRLF line endings and will not run:$bad"
+    say ""
+    say "Fix (run from the pack root):"
+    say "  git rm --cached -r . >/dev/null && git reset --hard"
+    say "  # or: find . -name '*.sh' -o -name '*.js' | xargs sed -i 's/\\r$//'"
+    die "refusing to install scripts that cannot execute"
+  fi
+}
+say() { printf '%s\n' "$*"; }
 act() { if [ "$DRY" = 1 ]; then say "  [dry-run] $*"; else say "  $*"; fi; }
 
 usage() {
@@ -54,12 +78,15 @@ validate_skill() {
   local dir="$1" base name desc problems=""
   base="$(basename "$dir")"
   [ -f "$dir/SKILL.md" ] || { echo "$base: missing SKILL.md"; return 1; }
-  head -1 "$dir/SKILL.md" | grep -q '^---[[:space:]]*$' || problems="$problems frontmatter-does-not-start-with---;"
+  # Windows editors (Notepad, some PowerShell writes) add a BOM and CRLF. The CLI tolerates
+  # both, so this validator must too, or a perfectly good skill reports as invalid.
+  head -1 "$dir/SKILL.md" | tr -d '\357\273\277\r' | grep -q '^---[[:space:]]*$' \
+    || problems="$problems frontmatter-does-not-start-with---;"
   local close
   close="$(awk 'NR>1 && /^---[[:space:]]*$/{print NR; exit}' "$dir/SKILL.md")"
   [ -n "$close" ] || problems="$problems frontmatter-not-closed;"
-  name="$(awk 'NR>1 && /^---[[:space:]]*$/{exit} /^name:/{sub(/^name:[[:space:]]*/,""); gsub(/^["'"'"']|["'"'"'][[:space:]]*$/,""); print; exit}' "$dir/SKILL.md")"
-  desc="$(awk 'NR>1 && /^---[[:space:]]*$/{exit} /^description:/{sub(/^description:[[:space:]]*/,""); print; exit}' "$dir/SKILL.md")"
+  name="$(awk 'NR>1 && /^---[[:space:]]*$/{exit} /^name:/{sub(/^name:[[:space:]]*/,""); gsub(/\r/,""); gsub(/^["'"'"']|["'"'"'][[:space:]]*$/,""); print; exit}' "$dir/SKILL.md")"
+  desc="$(awk 'NR>1 && /^---[[:space:]]*$/{exit} /^description:/{sub(/^description:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$dir/SKILL.md")"
   [ -n "$name" ] || problems="$problems missing-name;"
   [ -n "$desc" ] || problems="$problems missing-description;"
   if [ -n "$name" ]; then
@@ -127,8 +154,16 @@ install_agents_symlink() {
   local dir="$1"
   if [ -L "$dir/AGENTS.md" ] || [ -e "$dir/AGENTS.md" ]; then act "keep existing $dir/AGENTS.md"; return 0; fi
   if [ ! -e "$dir/knowledge.md" ]; then act "skip AGENTS.md symlink (no knowledge.md in $dir)"; return 0; fi
-  act "symlink $dir/AGENTS.md -> knowledge.md"
-  [ "$DRY" = 1 ] || ln -s knowledge.md "$dir/AGENTS.md"
+  if [ "$DRY" = 1 ]; then act "symlink $dir/AGENTS.md -> knowledge.md"; return 0; fi
+  rm -f "$dir/AGENTS.md"
+  if ln -s knowledge.md "$dir/AGENTS.md" 2>/dev/null; then
+    act "symlink $dir/AGENTS.md -> knowledge.md"
+  else
+    # Windows without Developer Mode cannot create symlinks; a copy keeps AGENTS.md working
+    # for other tools. Keep them in sync by editing knowledge.md and re-running the installer.
+    cp "$dir/knowledge.md" "$dir/AGENTS.md"
+    act "copy $dir/AGENTS.md (symlinks unavailable here; enable Windows Developer Mode for a real link)"
+  fi
 }
 
 install_codebuffignore() {
@@ -162,16 +197,21 @@ install_mcp() {
   fi
   if [ -e "$dest_dir/mcp.json" ]; then
     act "keep existing $dest_dir/mcp.json — merge by hand (fragment follows):"
-    [ "$DRY" = 1 ] || sed "s|__PACK_DIR__|$PACK_DIR|g; s/^/    /" "$src"
+    local repl; repl="$(norm_path "$PACK_DIR" | sed -e 's/[&\\]/\\&/g')"
+    [ "$DRY" = 1 ] || sed "s|__PACK_DIR__|$repl|g; s/^/    /" "$src"
   else
     act "install $dest_dir/mcp.json (from mcp/$(basename "$src"))"
-    if [ "$DRY" != 1 ]; then mkdir -p "$dest_dir"; sed "s|__PACK_DIR__|$PACK_DIR|g" "$src" > "$dest_dir/mcp.json"; fi
+    if [ "$DRY" != 1 ]; then
+      local repl; repl="$(norm_path "$PACK_DIR" | sed -e 's/[&\\]/\\&/g')"
+      mkdir -p "$dest_dir"
+      sed "s|__PACK_DIR__|$repl|g" "$src" > "$dest_dir/mcp.json"
+    fi
     case "$src" in
       *local-readonly*)
         say "    NOTE: every \$VAR this fragment references must be exported before launch,"
         say "          or Freebuff will skip the whole mcp.json:"
         say "          ND_USER ND_TOKEN ND_SALT LIDARR_API_KEY SLSKD_API_KEY MB_USER_AGENT"
-        say "    NOTE: path is baked in as $PACK_DIR — re-run the installer if you move the pack." ;;
+        say "    NOTE: path is baked in as $(norm_path "$PACK_DIR") — re-run the installer if you move the pack." ;;
     esac
   fi
 }
@@ -179,10 +219,18 @@ install_mcp() {
 # --- run --------------------------------------------------------------------
 if [ "$VERIFY_ONLY" = 1 ]; then verify_pack; exit $?; fi
 
-say "Freebuff Homelab Pack -> $PACK_DIR"
+say "Freebuff Homelab Pack -> $(norm_path "$PACK_DIR")"
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*) PLATFORM="windows-gitbash" ;;
+  Darwin) PLATFORM="macos" ;;
+  Linux) if grep -qi microsoft /proc/version 2>/dev/null; then PLATFORM="wsl"; else PLATFORM="linux"; fi ;;
+  *) PLATFORM="unknown" ;;
+esac
+say "platform: $PLATFORM"
 say ""
 say "validate:"
 verify_pack || die "pack validation failed; nothing installed"
+check_line_endings
 say ""
 
 if [ "$DO_PROJECT" = 1 ]; then
@@ -208,6 +256,13 @@ fi
 
 if [ "$DRY" = 1 ]; then say "dry run: nothing was written."; exit 0; fi
 
+case "$PLATFORM" in
+  windows-gitbash) say "Windows notes: read docs/windows.md. Short version: keep the pack and the"
+                   say "  repo on the SAME side (both Windows, or both WSL) — a Windows Freebuff"
+                   say "  cannot execute a server.js that lives on a \\wsl\$ path, and vice versa."; say "" ;;
+  wsl)            say "WSL notes: read docs/windows.md. If you also run Freebuff Desktop on Windows,"
+                  say "  install a second copy under Windows rather than crossing the boundary."; say "" ;;
+esac
 cat <<'NEXT'
 Next steps
   1. Edit knowledge.md — fill in every <ANGLE BRACKET> with your real paths, service

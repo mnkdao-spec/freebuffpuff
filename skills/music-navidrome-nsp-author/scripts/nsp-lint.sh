@@ -3,8 +3,16 @@
 # Usage: nsp-lint.sh file.nsp [more.nsp ...]
 # Structure/vocabulary check only. It cannot know your library's contents.
 set -uo pipefail
+
+# Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
+# `python3`; honours $PYTHON so you can force a specific one.
+if [ -z "${PY:-}" ]; then
+  PY="${PYTHON:-}"
+  [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
+fi
+if [ -z "$PY" ]; then echo "nsp-lint: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 [ $# -ge 1 ] || { echo "usage: nsp-lint.sh <file.nsp> [...]" >&2; exit 2; }
-python3 - "$@" <<'PY'
+"$PY" - "$@" <<'PY'
 import json, sys, re
 
 # A rule node is { <operator>: { <field>: <value> }, ... "all"/"any": [ <rule nodes> ] }.

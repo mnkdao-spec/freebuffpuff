@@ -4,6 +4,14 @@
 #
 # Usage: compose-doctor.sh [docker-compose.yml] [--json]
 set -uo pipefail
+
+# Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
+# `python3`; honours $PYTHON so you can force a specific one.
+if [ -z "${PY:-}" ]; then
+  PY="${PYTHON:-}"
+  [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
+fi
+if [ -z "$PY" ]; then echo "compose-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 FILE="${1:-docker-compose.yml}"; MODE="${2:-}"
 [ -f "$FILE" ] || { echo "compose-doctor: no such file: $FILE" >&2; exit 2; }
 
@@ -12,7 +20,7 @@ if command -v docker >/dev/null 2>&1 && [ -z "${COMPOSE_DOCTOR_NO_DOCKER:-}" ]; 
   RESOLVED="$(docker compose -f "$FILE" config --format json 2>/dev/null || true)"
 fi
 
-python3 - "$FILE" "$RESOLVED" "$MODE" <<'PY'
+"$PY" - "$FILE" "$RESOLVED" "$MODE" <<'PY'
 import json, os, re, sys
 path, resolved_raw, mode = sys.argv[1], sys.argv[2], sys.argv[3]
 findings, notes = [], []

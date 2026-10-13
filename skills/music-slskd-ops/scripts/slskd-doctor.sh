@@ -3,6 +3,14 @@
 # Requires: SLSKD_URL (default http://localhost:5030) and SLSKD_API_KEY.
 # A 401/403/404 is reported per probe and is not fatal - endpoint availability varies by version.
 set -uo pipefail
+
+# Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
+# `python3`; honours $PYTHON so you can force a specific one.
+if [ -z "${PY:-}" ]; then
+  PY="${PYTHON:-}"
+  [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
+fi
+if [ -z "$PY" ]; then echo "slskd-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 BASE="${SLSKD_URL:-http://localhost:5030}"
 KEY="${SLSKD_API_KEY:-}"
 if [ -z "$KEY" ]; then
@@ -16,7 +24,7 @@ probe() {
   code="${out:-000}"
   printf '  %-34s %-4s %s\n' "$path" "$code" "$desc"
   if [ "$code" = "200" ]; then
-    head -c 400 /tmp/.slskd-body | python3 -c 'import json,sys;d=sys.stdin.read();
+    head -c 400 /tmp/.slskd-body | "$PY" -c 'import json,sys;d=sys.stdin.read();
 try: print("      ->", json.dumps(json.loads(d))[:300])
 except Exception: print("      ->", d.replace("\n"," ")[:200])' 2>/dev/null || true
   fi

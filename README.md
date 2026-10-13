@@ -14,6 +14,21 @@ prompts · 4 ops files.** Everything read-only by default.
 ./install.sh --project . --mcp local-readonly    # adds ./.agents/mcp.json (opt-in, GET-only)
 ```
 
+## Windows 11
+
+Read [`docs/windows.md`](docs/windows.md). The short version:
+
+- Needs **Git for Windows** (for `bash`/`awk`/`sed`), **Node 18+**, **Python 3.9+**. Run the installer
+  from **Git Bash**, not PowerShell or cmd. The scripts fall back to `python` when `python3` is missing.
+- **Do not cross the WSL/Windows boundary.** Freebuff on Windows cannot execute a `server.js` living
+  on a `\\wsl$\` path. Keep the pack and the repo on the same side, per install.
+- **Hardlinks are the real risk.** Media on `C:\` bind-mounted into Docker Desktop crosses the
+  Windows to WSL2 boundary, where same-filesystem hardlink semantics are not guaranteed. Keep the
+  library on a Linux-side filesystem and verify with `stat -c '%d %i'` inside the containers.
+- Line endings are forced to LF by `.gitattributes`; the installer **refuses to install** CRLF scripts
+  rather than failing later with `\r: command not found` (a ZIP download is the usual cause).
+- Without Developer Mode, `AGENTS.md` is created as a copy instead of a symlink, and the installer says so.
+
 ## Built against the real CLI, not the docs
 
 The extension surface was probed against the shipped Freebuff binary (v0.2.27) before anything was

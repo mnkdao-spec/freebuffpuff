@@ -5,6 +5,14 @@
 #
 # Usage: lib-audit.sh <music-dir> [--max N] [--hash] [--out FILE] [--quiet]
 set -uo pipefail
+
+# Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
+# `python3`; honours $PYTHON so you can force a specific one.
+if [ -z "${PY:-}" ]; then
+  PY="${PYTHON:-}"
+  [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
+fi
+if [ -z "$PY" ]; then echo "lib-audit: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 DIR="${1:-}"; [ -n "$DIR" ] && [ -d "$DIR" ] || { echo "usage: lib-audit.sh <music-dir> [--max N] [--hash] [--out FILE]" >&2; exit 2; }
 shift || true
 MAX=2000; HASH=0; OUT=""
@@ -13,13 +21,13 @@ while [ $# -gt 0 ]; do case "$1" in
   --quiet) exec >/dev/null ;; *) echo "unknown flag: $1" >&2; exit 2 ;;
 esac; shift; done
 
-python3 - "$DIR" "$MAX" "$HASH" "$OUT" <<'PY'
-import os, subprocess, sys, json, collections, hashlib, re
+"$PY" - "$DIR" "$MAX" "$HASH" "$OUT" <<'PY'
+import os, subprocess, sys, json, collections, hashlib, re, shutil
 root, maxn, dohash, outpath = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1", sys.argv[4]
 AUDIO = {".flac",".mp3",".m4a",".aac",".ogg",".opus",".wav",".aiff",".aif",".ape",".wv",".mpc",".wma"}
-have_ffprobe = subprocess.run(["which","ffprobe"], capture_output=True).returncode == 0
-have_metaflac = subprocess.run(["which","metaflac"], capture_output=True).returncode == 0
-have_flac = subprocess.run(["which","flac"], capture_output=True).returncode == 0
+have_ffprobe = shutil.which("ffprobe") is not None
+have_metaflac = shutil.which("metaflac") is not None
+have_flac = shutil.which("flac") is not None
 
 files, others, nsp = [], [], []
 for dirpath, dirnames, filenames in os.walk(root):
