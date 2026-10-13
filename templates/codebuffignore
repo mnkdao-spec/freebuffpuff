@@ -1,0 +1,31 @@
+# Files and folders Freebuff/Codebuff must not read.
+# Standard .gitignore syntax, including ! negation, applied after your .gitignore.
+# Docs: https://www.codebuff.com/docs/help/faq
+
+# secrets and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+**/secrets/
+
+# agent scratch (reports, staging, backups) — keep it out of context
+**/reports/
+**/backups/
+
+# media + personal data: too large and too private to feed a model
+media/
+**/Music/
+**/downloads/
+vault/
+**/.obsidian/
+**/.trash/
+
+# noisy appdata
+**/appdata/
+**/*.db-wal
+**/*.db-shm

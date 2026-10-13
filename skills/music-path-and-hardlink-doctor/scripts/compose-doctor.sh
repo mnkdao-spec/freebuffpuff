@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# compose-doctor.sh - READ-ONLY diagnosis of Docker Compose mounts, ids and hardlink feasibility.
+# Changes nothing. Never runs docker compose up/down. Exit 0 always (findings are output, not errors).
+#
+# Usage: compose-doctor.sh [docker-compose.yml] [--json]
+set -uo pipefail
+FILE="${1:-docker-compose.yml}"; MODE="${2:-}"
+[ -f "$FILE" ] || { echo "compose-doctor: no such file: $FILE" >&2; exit 2; }
+
+RESOLVED=""
+if command -v docker >/dev/null 2>&1 && [ -z "${COMPOSE_DOCTOR_NO_DOCKER:-}" ]; then
+  RESOLVED="$(docker compose -f "$FILE" config --format json 2>/dev/null || true)"
+fi
+
+python3 - "$FILE" "$RESOLVED" "$MODE" <<'PY'
+import json, os, re, sys
+path, resolved_raw, mode = sys.argv[1], sys.argv[2], sys.argv[3]
+findings, notes = [], []
+
+def add(level, msg): findings.append((level, msg))
+
+svcs = {}
+if resolved_raw.strip():
+    try:
+        svcs = json.loads(resolved_raw).get("services", {})
+        notes.append("source: `docker compose config --format json` (fully resolved)")
+    except Exception as e:
+        notes.append("resolved config unparsable: %s" % e)
+if not svcs:
+    try:
+        import yaml  # type: ignore
+        with open(path) as fh:
+            svcs = (yaml.safe_load(fh) or {}).get("services", {}) or {}
+        notes.append("source: raw YAML via pyyaml (NOT resolved - env vars unsubstituted)")
+    except Exception:
+        text = open(path).read()
+        svcs = {m.group(1): {} for m in re.finditer(r'^  ([A-Za-z0-9_.-]+):\s*$', text, re.M)}
+        notes.append("source: regex service-name scan only (no yaml module). Install pyyaml or use docker.")
+
+mounts, ids = {}, {}
+for name, s in svcs.items():
+    vols = []
+    for v in (s.get("volumes") or []):
+        if isinstance(v, dict):
+            src, tgt = v.get("source", ""), v.get("target", "")
+            ro = v.get("read_only", False); typ = v.get("type", "bind")
+        else:
+            parts = str(v).split(":")
+            src, tgt = (parts[0], parts[1]) if len(parts) > 1 else ("", parts[0])
+            ro = len(parts) > 2 and "ro" in parts[2]; typ = "bind"
+        vols.append((src, tgt, ro, typ))
+    mounts[name] = vols
+    env = s.get("environment") or {}
+    if isinstance(env, list):
+        env = dict(re.split(r"=", e, 1) for e in env if "=" in e)
+    ids[name] = {k: env.get(k) for k in ("PUID", "PGID", "UMASK", "SLSKD_UMASK", "user")}
+
+# 1. same host dir -> different container paths across services (breaks consistent pathing)
+by_src = {}
+for name, vols in mounts.items():
+    for src, tgt, ro, typ in vols:
+        if src and not src.startswith("/"):
+            continue
+        by_src.setdefault(src, []).append((name, tgt, ro))
+for src, uses in sorted(by_src.items()):
+    targets = {t for _, t, _ in uses}
+    if len(targets) > 1:
+        detail = ", ".join("%s:%s" % (n, t) for n, t, _ in uses)
+        add("WARN", "host path %s is mounted at %d different container paths (%s). "
+                    "Path mismatches between slskd-reported and Lidarr-visible paths are the "
+                    "usual cause of 'album never imports'." % (src, len(targets), detail))
+
+# 2. shared download/library root: do the music services agree on one /data?
+data_users = {n: {t for _, t, _, _ in v if t.startswith("/data")} for n, v in mounts.items()}
+n_with = sum(1 for v in data_users.values() if v)
+if n_with >= 2:
+    notes.append("services mounting under /data: %s" % ", ".join(sorted(n for n, v in data_users.items() if v)))
+
+# 3. hardlink feasibility notes
+for name, vols in mounts.items():
+    for src, tgt, ro, typ in vols:
+        if typ and typ != "bind":
+            add("INFO", "%s: volume %s is type=%s (named volume) mounted at %s. Hardlinks between "
+                        "a named volume and a bind mount are not possible; Lidarr will copy." % (name, src or "-", typ, tgt))
+        if re.match(r'^(\\\\|[A-Za-z]:[\\\\/])', src) or ":" in src and "//" in src:
+            add("INFO", "%s: %s looks like a remote/UNC path. Hardlink and atomic-move support "
+                        "depends on the server and mount; verify before relying on it." % (name, src))
+        if re.search(r'/(downloads|download|staging)/?$', src) and re.search(r'/(media|music|library)/?$', src):
+            pass
+
+# 4. uid/gid/umask coherence
+puids = {v.get("PUID") for v in ids.values() if v.get("PUID")}
+pgids = {v.get("PGID") for v in ids.values() if v.get("PGID")}
+if len(puids) > 1:
+    add("WARN", "multiple PUID values across services: %s. Mixed ownership is a common cause of "
+                "'permission denied' on import." % sorted(puids))
+if len(pgids) > 1:
+    add("WARN", "multiple PGID values across services: %s." % sorted(pgids))
+ser = {n: v.get("UMASK") for n, v in ids.items() if v.get("UMASK")}
+if ser and len(set(ser.values())) > 1:
+    add("WARN", "inconsistent UMASK values: %s. UMASK=002 (group-writable) is the Servarr "
+                "recommendation when a shared group is used." % ser)
+for name, v in ids.items():
+    if v.get("SLSKD_UMASK"):
+        add("INFO", "%s uses SLSKD_UMASK. slskd does not follow the Servarr PUID/PGID convention - "
+                    "do not copy env vars between these images." % name)
+    if v.get("user"):
+        notes.append("%s sets user=%s" % (name, v["user"]))
+
+# 5. dangerous patterns
+for name, s in svcs.items():
+    if str(s.get("network_mode", "")).startswith("service:"):
+        notes.append("%s uses network_mode: %s - it has no ports of its own; publish ports on the "
+                     "VPN container." % (name, s["network_mode"]))
+    d = s.get("depends_on")
+    if isinstance(d, dict) and any("condition" not in v for v in d.values() if isinstance(v, dict)):
+        add("INFO", "%s depends_on without condition: service_healthy - ordering waits for start, "
+                    "not readiness." % name)
+
+print("compose-doctor: %s" % os.path.abspath(path))
+for n in notes: print("  note: %s" % n)
+if not findings:
+    print("  no structural findings.")
+for level, msg in findings:
+    print("  [%s] %s" % (level, msg))
+print("  services: %s" % ", ".join(sorted(svcs)) if svcs else "  (none parsed)")
+if mode == "--json":
+    print(json.dumps({"findings": [{"level": l, "message": m} for l, m in findings], "notes": notes}))
+PY
+echo "compose-doctor: read-only; nothing was changed."
