@@ -15,7 +15,7 @@ say() { printf '%s\n' "$*"; }
 act() { if [ "$DRY" = 1 ]; then say "  [dry-run] $*"; else say "  $*"; fi; }
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "${BASH_SOURCE[0]}"
   cat <<'USAGE'
 Scopes (default: --project .):
   --project [DIR]   install into DIR (default: current directory)
@@ -164,7 +164,7 @@ install_mcp() {
     act "keep existing $dest_dir/mcp.json — merge by hand (fragment follows):"
     [ "$DRY" = 1 ] || sed "s|__PACK_DIR__|$PACK_DIR|g; s/^/    /" "$src"
   else
-    act "install $dest_dir/mcp.json (from mcp/$MCP_NAME.readonly.json)"
+    act "install $dest_dir/mcp.json (from mcp/$(basename "$src"))"
     if [ "$DRY" != 1 ]; then mkdir -p "$dest_dir"; sed "s|__PACK_DIR__|$PACK_DIR|g" "$src" > "$dest_dir/mcp.json"; fi
     case "$src" in
       *local-readonly*)
