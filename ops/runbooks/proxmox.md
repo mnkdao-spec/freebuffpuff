@@ -15,13 +15,31 @@ systemctl --failed
 Anything [FAIL] from pve-doctor is a data-loss or availability risk: storage inactive, pool
 DEGRADED, root filesystem filling, Docker on the PVE host, no backup job.
 
+## What a container backup does NOT contain - read this before trusting one
+A container backup is the config plus the **root disk only**. The music library and the downloads
+folder are bind mounts (or volume mount points with no `backup=1`), so:
+
+- `vzdump` does **not** back up your library, and never backs up a bind mount.
+- The DB and config live in the container rootfs and *are* backed up. So a restore gives you a
+  Navidrome and Lidarr that start up cleanly and point at a library that was never in the backup.
+  That is the failure mode this whole runbook exists to prevent.
+
+Back up the library and `downloads` on their own schedule (a ZFS snapshot task, or `rsync`/`restic`
+to another disk or host) and drill that restore too. To see which mounts are which, the read-only
+audit lists every one and says which are covered:
+`bash .agents/skills/proxmox-guest-placement/scripts/lxc-audit.sh <id>`.
+
 ## Before ANY risky change (upgrade, storage move, guest resize, mount change)
-1. `bash .agents/skills/proxmox-backup-and-restore/scripts/...` - use the skill; at minimum run a
-   backup and confirm it completed.
-2. Capture the "before": `pveversion -v`, `pct config <id>`, `qm config <id>`, `cat /etc/network/interfaces`,
+1. Read the `proxmox-backup-and-restore` skill and take a real backup of the guest you are about to
+   touch. First check for a job covering it - `grep -E 'vzdump|vmid|mode|storage' /etc/pve/jobs.cfg` -
+   and confirm its last run actually succeeded. No job, or no confirmed run, means run one by hand:
+   `vzdump <id> --mode snapshot --storage <target>` (APPROVAL-REQUIRED), and wait for it to finish
+   before changing anything else. A backup you have not seen complete is not a backup.
+2. Remember step 1 does not cover the library - see the section above.
+3. Capture the "before": `pveversion -v`, `pct config <id>`, `qm config <id>`, `cat /etc/network/interfaces`,
    `pvesm status`. Save it next to the change note.
-3. Confirm free space on `/` and on the target storage.
-4. Write the rollback command down first.
+4. Confirm free space on `/` and on the target storage.
+5. Write the rollback command down first.
 
 ## Disk filling up
 ```bash
@@ -55,5 +73,8 @@ nested Docker stack. There is no supported downgrade.
 
 ## Restore drill (do this quarterly, it is the only proof)
 1. Restore the newest backup of one guest **to a new VMID**.
-2. Start it with no network. Verify services, config files and the library mount.
-3. Record the elapsed time and the steps you actually took. Delete the test guest after.
+2. Start it with no network. Verify services, config files - and the library mount, which came from
+   the separate library backup, not from this restore.
+3. Repeat for the library backup on its own. A guest backup that restores into an empty `/data/media`
+   is a test that passed while the thing you actually care about is still unverified.
+4. Record the elapsed time and the steps you actually took. Delete the test guest after.

@@ -4,6 +4,9 @@
 # duplicate candidates, FLAC integrity failures. Output to stdout (and optionally --out FILE).
 #
 # Usage: lib-audit.sh <music-dir> [--max N] [--hash] [--out FILE] [--quiet]
+#   --out takes a FILE path (its directory must already exist).
+# Exit: 0 = report produced (findings are output, not errors), 2 = usage, 3 = --out not writable,
+#       4 = needs Python.
 set -uo pipefail
 
 # Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
@@ -24,6 +27,16 @@ esac; shift; done
 "$PY" - "$DIR" "$MAX" "$HASH" "$OUT" <<'PY'
 import os, subprocess, sys, json, collections, hashlib, re, shutil
 root, maxn, dohash, outpath = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1", sys.argv[4]
+
+# A trailing slash or an existing directory is the common mistake (--out reports/ instead of
+# --out reports/audit.json). Say so before scanning, rather than dying with a traceback at the end.
+if outpath and (outpath.endswith(("/", os.sep)) or os.path.isdir(outpath)):
+    print("lib-audit: --out takes a FILE path, not a directory: %r" % outpath, file=sys.stderr)
+    print("lib-audit: e.g. --out <scratch>/reports/audit.json (the directory must exist)", file=sys.stderr)
+    sys.exit(3)
+if outpath and not os.path.isdir(os.path.dirname(os.path.abspath(outpath))):
+    print("lib-audit: --out parent directory does not exist: %r" % os.path.dirname(os.path.abspath(outpath)), file=sys.stderr)
+    sys.exit(3)
 AUDIO = {".flac",".mp3",".m4a",".aac",".ogg",".opus",".wav",".aiff",".aif",".ape",".wv",".mpc",".wma"}
 have_ffprobe = shutil.which("ffprobe") is not None
 have_metaflac = shutil.which("metaflac") is not None
@@ -165,10 +178,15 @@ print("Deliberate non-findings: this script does NOT detect 'fake lossless' or t
 print("provenance. A spectrogram is a heuristic; do not delete files on its basis.")
 
 if outpath:
-    with open(outpath, "w") as fh:
-        fh.write(json.dumps({"scanned": rep["scanned"], "missing_tags": dict(rep["missing_tags"]),
-            "anomalies": rep["anomalies"], "dupes": [[g, v] for g, v in rep["dupes"]],
-            "flac_bad": rep["flac_bad"], "ext_mismatch": rep["ext_mismatch"],
-            "same_title_groups": sum(1 for v in rep["same_title"].values() if v > 1)}, indent=2))
+    try:
+        with open(outpath, "w") as fh:
+            fh.write(json.dumps({"scanned": rep["scanned"], "missing_tags": dict(rep["missing_tags"]),
+                "anomalies": rep["anomalies"], "dupes": [[g, v] for g, v in rep["dupes"]],
+                "flac_bad": rep["flac_bad"], "ext_mismatch": rep["ext_mismatch"],
+                "same_title_groups": sum(1 for v in rep["same_title"].values() if v > 1)}, indent=2))
+    except OSError as e:
+        # A traceback here would hide the one useful fact: the report was NOT written.
+        print("lib-audit: the report was NOT written - %s" % e, file=sys.stderr)
+        sys.exit(3)
     print("report written: %s" % outpath)
 PY

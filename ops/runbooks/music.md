@@ -29,8 +29,10 @@ move, scan, retag, scan - doing both at once breaks matching.
 
 ## Anomaly sweep (read-only)
 ```bash
-bash .agents/skills/music-library-audit/scripts/lib-audit.sh <library> --hash --out <scratch>/reports/
+mkdir -p <scratch>/reports          # --out needs an existing directory
+bash .agents/skills/music-library-audit/scripts/lib-audit.sh <library> --hash --out <scratch>/reports/audit.json
 ```
+`--out` takes a **file** path, not a directory - `--out <scratch>/reports/` exits 3 with a message.
 Read the report, then propose only reversible fixes. Never delete on a duplicate candidate.
 
 ## Smart playlist will not load

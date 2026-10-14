@@ -15,7 +15,7 @@ never a cleanup.
 ```bash
 bash scripts/lib-audit.sh <music-dir>                  # next to this SKILL.md
 bash scripts/lib-audit.sh <music-dir> --hash           # confirm duplicates by content
-bash scripts/lib-audit.sh <music-dir> --max 5000 --out <scratch>/reports/audit.json
+bash scripts/lib-audit.sh <music-dir> --max 5000 --out <scratch>/reports/audit.json   # a FILE, not a dir
 ```
 It reports: files scanned, tools available, per-tag completeness percentages, FLAC integrity
 failures (`flac -t`), anomalies (very low bitrate, lossless codec with a suspiciously low

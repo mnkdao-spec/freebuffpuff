@@ -467,6 +467,16 @@ want "catches the FLAC integrity failure" "$OUT/lib-tools.txt" 'FLAC INTEGRITY F
 want "counts files missing tags"          "$OUT/lib-tools.txt" 'ARTIST.*1'
 env PATH="$AUDIO_FAKE:$PATH" PYTHON=python3 bash "$LA_S" "$FIX/music" --out "$OUT/lib.json" >/dev/null 2>&1
 isjson "--out writes a standalone JSON report" "$OUT/lib.json"
+# An unusable --out must be a clean message, not a traceback: the runbook used to document a
+# directory (--out reports/), which died with IsADirectoryError inside the scan.
+mkdir -p "$WORK/libout"
+env PATH="$AUDIO_FAKE:$PATH" PYTHON=python3 bash "$LA_S" "$FIX/music" --out "$WORK/libout/" >/dev/null 2>"$OUT/lib-dir.err"
+exitcode "--out <directory> is refused" 3 "$?"
+wantnot "  ...without a traceback"      "$OUT/lib-dir.err" 'Traceback'
+want "  ...and says what --out wants"   "$OUT/lib-dir.err" 'FILE path'
+env PATH="$AUDIO_FAKE:$PATH" PYTHON=python3 bash "$LA_S" "$FIX/music" --out "$WORK/no-such-dir/audit.json" >/dev/null 2>"$OUT/lib-parent.err"
+exitcode "--out with a missing parent is refused" 3 "$?"
+wantnot "  ...without a traceback"                 "$OUT/lib-parent.err" 'Traceback'
 
 # ===================================================== 6. slskd-doctor.sh
 head_ "slskd-doctor.sh  (music-slskd-ops, installed)"
