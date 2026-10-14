@@ -34,7 +34,7 @@ Write these at these moments:
 ```
 STATE:     where things stand in one or two sentences
 DONE:      verified items, with the command that proved them
-IN FLEGHT: the current item and its exact next action
+IN FLIGHT: the current item and its exact next action
 NEXT:      the single next action someone else can pick up cold
 BLOCKED:   what needs a human decision, and the question to answer
 FILES:     paths touched, and whether they are committed
