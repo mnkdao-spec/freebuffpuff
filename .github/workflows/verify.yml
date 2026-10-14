@@ -23,11 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'   # the MCP server uses global fetch, AbortSignal.timeout and web streams
+          node-version: '24'   # matches local verification; the MCP server needs fetch,
+                              # AbortSignal.timeout and web streams (18+), and 20 is EOL
 
       - name: Syntax - every shell script, plus the two Node files
         run: |
@@ -39,18 +40,24 @@ jobs:
           node --check tests/mcp-fixture.js
           echo "syntax OK: ${#sh[@]} shell scripts, 2 node files"
 
-      - name: ShellCheck
+      - name: ShellCheck (pinned, not the runner's apt package)
         run: |
           set -euo pipefail
-          if ! command -v shellcheck >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq shellcheck
-          fi
-          shellcheck --version
+          # Pinned deliberately. ubuntu-latest's apt shellcheck is 0.9.0, which still reports checks
+          # that 0.11.0 dropped: it failed this job on SC2002 in tests/invariants.sh, a finding a
+          # maintainer running 0.11.0 locally cannot reproduce. A gate is only worth having if it is
+          # deterministic, so fetch the version this pack is verified against (see .shellcheckrc).
+          # The asset is x86_64, which is what ubuntu-latest is.
+          SC_VERSION=v0.11.0
+          curl -fsSL -o /tmp/sc.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/${SC_VERSION}/shellcheck-${SC_VERSION}.linux.x86_64.tar.xz"
+          tar -xJf /tmp/sc.tar.xz -C /tmp
+          SC="/tmp/shellcheck-${SC_VERSION}/shellcheck"
+          "$SC" --version
           mapfile -t sh < <(git ls-files '*.sh')
           # No arguments would make ShellCheck read stdin and hang; fail loudly instead.
           [ "${#sh[@]}" -gt 0 ] || { echo 'no shell files: is this a git checkout?' >&2; exit 1; }
-          shellcheck -x "${sh[@]}"
+          "$SC" -x "${sh[@]}"
 
       - name: Behaviour suite  (tests/run.sh)
         run: bash tests/run.sh

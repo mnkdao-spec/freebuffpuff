@@ -5,6 +5,11 @@
 # and fails on anything not disabled here. Reproduce locally with that exact command - ShellCheck
 # only picks this file up when it is invoked from the pack root.
 #
+# CI pins ShellCheck to the version below rather than using the runner's apt package. They disagree:
+# 0.9.0 (apt, Ubuntu 24.04) still reports checks 0.11.0 has dropped - it failed CI on SC2002, which
+# 0.11.0 does not emit - so an unpinned gate would break for a reason you cannot reproduce locally.
+# Use 0.11.0 to match CI.
+#
 # The gate is pinned at ZERO errors and ZERO warnings (baseline measured 2026-10-14, ShellCheck
 # 0.11.0: 0 errors, 0 warnings, 36 notes). Each note category is disabled deliberately:
 #

@@ -91,7 +91,7 @@ for n, c in collections.Counter(descs).items():
 print("skills=%d problems=%d" % (len(dirs), len(problems)))
 for p in problems: print("  " + p)
 PY
-if grep -q 'problems=0' "$OUT/fm.txt"; then ok "$(cat "$OUT/fm.txt" | head -1)"; else bad "frontmatter contract violated:"; sed -n '2,12p' "$OUT/fm.txt"; fi
+if grep -q 'problems=0' "$OUT/fm.txt"; then ok "$(head -1 "$OUT/fm.txt")"; else bad "frontmatter contract violated:"; sed -n '2,12p' "$OUT/fm.txt"; fi
 
 # ============================================ 3. referenced scripts are usable
 head_ "scripts referenced by skills exist, are executable, have a shebang"
