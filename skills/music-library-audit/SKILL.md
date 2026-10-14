@@ -8,35 +8,57 @@ metadata:
 
 # Library audit
 
-Read-only. Deliverable = report + ranked human-action candidates, never cleanup.
+Read-only. The deliverable is a report and a ranked list of candidates for a human to act on,
+never a cleanup.
 
 ## Run the auditor
 ```bash
-bash scripts/lib-audit.sh <music-dir>
-bash scripts/lib-audit.sh <music-dir> --hash
-bash scripts/lib-audit.sh <music-dir> --max 5000 --out <scratch>/reports/audit.json
+bash scripts/lib-audit.sh <music-dir>                  # next to this SKILL.md
+bash scripts/lib-audit.sh <music-dir> --hash           # confirm duplicates by content
+bash scripts/lib-audit.sh <music-dir> --max 5000 --out <scratch>/reports/audit.json   # a FILE, not a dir
 ```
-Reports: files scanned, tool availability, tag completeness %, FLAC integrity (`flac -t`),
-anomalies (low bitrate, zero-length, odd sample rates), extension-vs-codec mismatches,
-same artist+album+title groups, size+duration duplicate candidates (+optional content hash).
+It reports: files scanned, tools available, per-tag completeness percentages, FLAC integrity
+failures (`flac -t`), anomalies (very low bitrate, lossless codec with a suspiciously low
+bitrate, zero-length/unreadable duration, unusual sample rates), extension-vs-codec mismatches,
+groups of tracks sharing artist+album+title, and duplicate candidates by size+duration with an
+optional content hash to separate "identical" from "similar".
 
-## Meanings
-- **FLAC failure** = audio ≠ stored signature. Recovery = restore/re-rip; retagging fixes nothing.
-- **Missing tags** = top cause of server splits (see tagging-doctor before tag fixes).
-- **Extension mismatch** = hint only; spectrogram is heuristic, never verdict.
-- **Size+duration dupes** = candidates; distinct MBIDs can mean legit editions. Review queue.
-- Cannot decide what to keep; doesn't detect transcodes; doesn't know your priorities.
+## What the findings mean, and what they do not
+- **FLAC integrity failure** = the decoded audio does not match the stored signature. Recovery
+  means restoring a known-good copy or re-ripping. Renaming or retagging "fixes" nothing.
+- **Missing tags** are the leading cause of a server splitting albums and artists. See
+  `music-navidrome-tagging-doctor` before proposing any tag fixes.
+- **Extension vs codec mismatch** is a **hint**, not proof. Only a spectrogram (a heuristic,
+  never a verdict) plus provenance can speak to whether a file came from a lossy source.
+- **Duplicate candidates by size+duration** are just that — candidates. Different MusicBrainz
+  release IDs legitimately mean different editions (deluxe, remaster, regional reissue,
+  catalogue variants). Same-title groups are a *review* queue.
+- This audit **cannot** decide what to keep. It does not rank by provenance, does not detect
+  transcodes, and does not know what you care about.
 
 ## Procedure
-1. Run read-only; report exact cmd. 2. Counts first, then worst 10-20 per category.
-3. Triage: **bulk-safe** / **needs review** / **human decision**. 4. Report to scratch, never library.
-5. Propose at most one reversible next action.
+1. Run the auditor read-only. Report the exact command.
+2. Summarise the counts first, then the worst 10-20 items per category.
+3. Group findings into: **safe to fix in bulk** (missing sidecar art, empty genre),
+   **needs review** (duplicates, odd bitrates, mismatches), **needs a human decision**
+   (editions, deletion, re-ripping).
+4. Write the report to the scratch directory, never into the library.
+5. Propose at most one next action, and make it reversible.
 
-## Output
+## Output format
 ```
-COMMAND / SCOPE / COUNTS / WORST / TRIAGE / PROPOSED / NOT DONE
+COMMAND:    exact auditor invocation
+SCOPE:      directory, files scanned, cap applied
+COUNTS:     scanned / missing tags / anomalies / integrity failures / mismatch / dupe groups
+WORST:      the most severe items, with paths and the literal finding
+TRIAGE:     safe-to-fix | needs review | needs a decision
+PROPOSED:   one reversible next action, for approval
+NOT DONE:   no file was modified, moved, retagged or deleted
 ```
 
 ## Never
-Delete anything (dupes, "corrupt", "confirmed identical" — human's call); retag from this
-report alone; present heuristics as proof.
+- Delete anything. Not duplicates, not "obviously corrupt" files, not one of a "confirmed"
+  identical pair — deleting either hardlink of a pair has implications, and deleting either copy
+  of a real duplicate is still a human's call.
+- Rewrite tags based on this report alone; that is a separate reviewed task.
+- Present a heuristic (spectrogram cutoff, bitrate, file size) as proof of quality.
