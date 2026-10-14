@@ -52,7 +52,7 @@ prompts/              01-interview · 02-plan · 03-implement · 04-verify · 05
 ops/                  taskboard · progress · decisions · homelab-inventory
                       runbooks/{music, pkm, proxmox, website}
 docs/                 probe-results · threat-model · token-budget · trends
-                      music-notes · proxmox-notes · web-notes · windows
+                      music-notes · proxmox-notes · web-notes · pkm-notes · windows
 probe/                the Phase 0 probe kit + USER-CHECKLIST.md (10 minutes, on your machine)
 ```
 
@@ -225,6 +225,7 @@ without it.
 
 ## Adapting it
 
+- **Not a notes person?** Delete `skills/pkm/` (and `docs/pkm-notes.md`).
 - **Not a music person?** Delete `skills/music/` (and `docs/music-notes.md`) and keep `skills/core/`.
 - **Not on Proxmox?** Delete `skills/proxmox/`; the rest is hypervisor-agnostic.
 - **No website?** Delete `skills/web/` and `prompts/07-release-day.md`.

@@ -16,8 +16,8 @@ same file.
 ## Pick from the model, not the brand
 | Model | Examples | Behaviour to expect |
 |---|---|---|
-| File sync | Syncthing, rsync, cloud drives | transfers blocks and detects concurrent edits by producing a **conflict copy**; it does **not** merge paragraphs. Fine for one editor at a time. |
-| Vendor sync | Obsidian Sync | integrated version history; end-to-end encryption applies to the *remote* vault, not the local one |
+| File sync | Syncthing, rsync, cloud drives | transfers blocks and detects concurrent edits by producing a **conflict copy** (`<name>.sync-conflict-<date>-<time>-<modifiedBy>.<ext>`); it does **not** merge paragraphs. Fine for one editor at a time. |
+| Vendor sync | Obsidian Sync | **merges Markdown** conflicts with a text-diff algorithm (non-Markdown files fall back to last-modified-wins), and that merge can duplicate text or mangle formatting. End-to-end encryption is the default for a new remote vault but is **optional**, it applies to the *remote* vault only (Obsidian states plainly that it does not encrypt your local vault), and the server can still see which device moved or deleted a file, when, and which encrypted path maps to which content. |
 | CRDT library | Yjs, Automerge | concurrent updates merge; the app owns transport and persistence |
 | Sync platform | Electric, Zero, Jazz, InstantDB | server-authoritative or query-based designs; not synonymous with CRDTs |
 
@@ -25,10 +25,18 @@ A real-time API is not proof of CRDT semantics, and a CRDT library is not a sync
 about the actual conflict model, offline guarantees, persistence, permissions and portability.
 
 ## Consequences for a notes vault
-- **Sync propagates deletion.** Every device deletes too. Sync is not a backup; version history or
-  a separate backup is.
-- **Do not sync app state.** Syncing `.obsidian/` across devices with different plugin versions is
-  a reliable source of corruption. Sync notes; configure the app per device.
+- **Sync propagates deletion.** Every device deletes too. Sync is not a backup - and neither is
+  version history. Obsidian's own docs say file recovery "is not a complete backup solution" and
+  recommend backing the files up separately; Sync history is time-limited (notes: one month on
+  Standard, twelve on Plus; attachment versions only two weeks).
+- **Do not run two sync tools over the same vault.** Obsidian documents "double-syncing" - Sync
+  alongside another file-sync service on the same vault - as a common cause of files disappearing,
+  and advises against it. That is the failure mode with a citable cause; "different plugin versions
+  across devices corrupt `.obsidian`" is a plausible risk, not something the docs establish, so
+  present it as caution rather than fact.
+- **`.obsidian/` does sync, and selectively.** It is the one hidden folder Obsidian Sync includes by
+  default, and the config categories (including which community plugins are enabled) are opt-in
+  per category. A newly synced plugin setting usually needs an app restart before it takes effect.
 - **Editing the same file on two devices simultaneously** in a file-sync setup produces a conflict
   copy, and it is the copy — not the original — that may disappear from view.
 - **If you build on CRDTs**, the note format stops being plain Markdown in practice. That is a

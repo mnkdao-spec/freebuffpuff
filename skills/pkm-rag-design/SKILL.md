@@ -16,17 +16,32 @@ For each stage, say where it happens:
 | Stage | Local option | Hosted option |
 |---|---|---|
 | Chunking + index build | always local | - |
-| Embeddings | local model (some vault plugins ship one, offline by default) | embedding API |
-| Index storage | on disk in the vault | remote vector DB |
+| Embeddings | local model (some vault plugins ship one, offline by default; or an Ollama / llama.cpp `/api/embed` endpoint) | embedding API |
+| Index storage | a file on disk in the vault (sqlite-vec, LanceDB) | remote vector DB |
 | Query + retrieved passages | local model | hosted LLM |
 
 **A local index does not mean the query is local.** Embeddings may be computed on-device while
 the question and the retrieved note excerpts go to a hosted model. State the whole path
 explicitly, and offer a "keep these folders out of the index" list.
 
+**Local vector storage is a solved problem at this scale**, so do not reach for a server. For one
+user and a few thousand notes the reasonable options are an embedded SQLite extension
+(**sqlite-vec** - small, dependency-free, but still pre-1.0; **sqlite-vss** is explicitly no longer
+in active development and should not be a new choice) or **LanceDB**, an embedded library with
+vector and full-text search that stores to a directory. A local Qdrant/Chroma server is fine if you
+want the API, but it is a process to babysit for a corpus that fits in tens of megabytes:
+float32 vectors cost `dimensions × 4` bytes, so 50k vectors at 384 dims is only ~75 MiB. Raw text
+size, not vectors, is what usually decides the design.
+
 ## Design rules
-1. **Chunk by meaning, not by size.** Heading-section, then paragraph — never a whole note as one
-   unit, and never a fixed 1000-character cut that splits mid-thought.
+1. **Chunk by meaning, not by size** — but respect the model's input limit, which is the part
+   people miss. Split on headings first, then paragraphs; never a whole note as one unit and never a
+   fixed character cut mid-thought. Small models have small windows: `all-MiniLM-L6-v2` truncates at
+   **256 tokens**, so a 2000-token chunk is silently half-indexed. A practical starting point is
+   ~300-500 tokens with 40-80 tokens of overlap, then tune against real questions. **Check the model
+   card and honour its input format**: E5 models expect `query:`/`passage:` prefixes and BGE models a
+   query instruction, and using the wrong side (or omitting it) quietly degrades retrieval. Index and
+   query with the same model *and the same settings* — changing either means re-indexing.
 2. **Retrieve with metadata, not just vectors.** Filter by folder, tag, `status`, or date range
    before ranking. Semantic similarity and exact-text search are different tools: keep full-text
    search for names, IDs, codes and quotes, and use embeddings for "what have I written about X".

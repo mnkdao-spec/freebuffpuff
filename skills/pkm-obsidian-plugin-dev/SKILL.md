@@ -14,34 +14,55 @@ Obsidian itself is proprietary, but its plugin API is documented TypeScript, and
 ## Plugin shape
 ```
 <vault>/.obsidian/plugins/<id>/
-  manifest.json      id, name, version, minAppVersion, description, isDesktopOnly
+  manifest.json      REQUIRED: id, name, version, minAppVersion, author,
+                     description, isDesktopOnly
+                     optional: authorUrl, fundingUrl   (data.json is written by
+                     loadData/saveData — it is not a file you author)
   main.js            bundle (entry: onload/onunload)
-  styles.css         optional
+  styles.css         optional (optional as a release asset too)
 src/main.ts          entry point in your dev repo
 ```
+`author` is easy to forget and is **required**, so a manifest without it is rejected. A
+`versions.json` is **not** required: it only maps a plugin version to a `minAppVersion`, and you
+touch it when you raise `minAppVersion`. To publish, the GitHub release needs `main.js` and
+`manifest.json`; `styles.css` only if you use it. Verify the field list against the manifest
+reference rather than this list — it is the kind of thing that gains a field.
+
 Core plugin APIs worth knowing: the vault object (read/create/modify/**delete** files),
 the workspace (views, leaves, layout), and the metadata cache (frontmatter, links, tags,
 backlinks). Register a command; add a settings tab; register a view.
 
 Rules that keep plugins safe and maintainable:
-1. **Prefer `vault.process`/`vault.create` and adapter APIs over direct `fs`** so Obsidian keeps
-   its internal state consistent.
+1. **Use the Vault API, not the Adapter API, and not raw `fs`.** For background edits prefer
+   `vault.process` (atomic) over the older `vault.modify`; for the *active* note use the **Editor**
+   API; for frontmatter use `FileManager.processFrontMatter()`. Reach for `this.app` rather than
+   the global `app`.
 2. **Never delete or overwrite a file silently.** A plugin that renames notes breaks every link.
 3. **Ask for less.** No network calls you did not tell the user about; no reading `.obsidian/`
-   secrets; no telemetry by default.
-4. **`isDesktopOnly: true`** if you use Node APIs — otherwise mobile installs break.
+   secrets; no telemetry by default. The directory's developer policies prohibit client-side
+   telemetry and dynamically loaded ads, and require the README to disclose network use and any
+   access outside the vault.
+4. **`isDesktopOnly: true`** if you use Node APIs — otherwise mobile installs break (Node/Electron
+   APIs do not exist on mobile).
 5. **Debounce.** Metadata cache events fire constantly; a per-event full-vault scan is how vaults
    get slow.
-6. **Version pin** `minAppVersion` to what you actually use.
+6. **Version pin** `minAppVersion` to what you actually use, and re-read the changelog for breaking
+   API changes when you raise it — recent ones include `FileManager.generateMarkdownLink` no longer
+   prefixing `!` on attachments and a Bases `BaseOption#shouldHide` signature change.
 
 ## What agents can and cannot do with a vault
 - **Filesystem is the real interface.** The vault is Markdown on disk; an agent editing files
   directly is the most portable approach and needs no plugin at all.
-- **Local REST API** (community plugin) exposes an authenticated local HTTP API and additionally
-  documents a built-in MCP endpoint with read/write/delete, search, and targeted edits such as
-  patching a heading or a frontmatter field. Separate MCP servers that talk to that plugin also
-  exist. **These can delete notes** — scope them, prefer read-only, and treat write access as a
-  privilege, not a convenience.
+- **The official Obsidian CLI** is the vendor-supported programmatic path (public since 1.12): it
+  is documented for scripting, automation and integration with external tools, and it needs the
+  app running. If you would otherwise install a plugin just to let a script touch the vault, check
+  whether the CLI covers it first.
+- **Local REST API** (community plugin, id `obsidian-local-rest-api`) exposes an authenticated
+  local HTTP API and additionally documents a built-in MCP endpoint with read/write/delete, search,
+  and targeted edits such as patching a heading or a frontmatter field. It is still gated behind a
+  locally generated HTTPS certificate **and an API key** (only the health endpoint is
+  unauthenticated). Separate MCP servers that talk to that plugin also exist. **These can delete
+  notes** — scope them, prefer read-only, and treat write access as a privilege, not a convenience.
 - **Never expose a local API beyond localhost**, and never put its key in a prompt, a repo, or a
   commit.
 
