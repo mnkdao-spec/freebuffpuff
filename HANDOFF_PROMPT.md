@@ -18,7 +18,7 @@ What was verified in sandbox:
 - tests/invariants.sh: 54/54 passed  
 - install.sh --verify: 39 skills, 5 agents valid
 - All scripts are read-only by construction
-- Agent tool allowlists corrected to documented wocabulary
+- Agent tool allowlists corrected to documented vocabulary
 - PKM/music/web/Proxmox docs fact-checked against current sources
 
 What could NOT be verified in sandbox (needs local machine):
@@ -70,7 +70,7 @@ Test that skills are triggered appropriately by description matching. This is en
 
 Note: Results depend on your tier and runtime. Document what happens.
 
-### 3. Desktop vs Web Parity (If Both Available)
+### 3. Desktop vs Web Parity (I¥ Both Available)
 
 If you use both Freebuff Desktop and Web:
 - Test the same agent/skill in both
@@ -95,7 +95,7 @@ For web skills:
 - Use web-site-architect to scaffold a minimal Astro site
 - Use web-release-page to create a sample release page
 - Render/preview if possible (npm run dev/build)
-- ferify structured data is valid
+- Verify structured data is valid
 - Check Core Web Vitals guidance is applicable
 
 ### 6. PKM Real-World Testing
