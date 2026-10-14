@@ -1,1 +1,1 @@
-{ "mcpServers": { "probeEcho": { "command": "node", "args": ["./probe/bin/mcp-echo.js"] } } }
+{ "mcpServers": { "probeEcho": { "command": "node", "args": ["/workspace/chats/4a5fa7138c63de3fa0a5c3c6/probe/bin/mcp-echo.js"] } } }
