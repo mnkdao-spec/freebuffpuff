@@ -30,7 +30,21 @@ Absolute constraints:
 - Never open a file that holds credentials (.env, *.key, *.pem, config.xml, slskd.yml with tokens).
   Report its location and which variables it is expected to define - never its contents.
 - Distinguish what you OBSERVED (a file you read, a line you can cite) from what you INFER.
-  Label every inference.`,
+  Label every inference.
+
+Produce, in this order:
+1. Services - name, image, ports published, and what each is for.
+2. Mounts - host path -> container path, per service. Flag any host path that appears at different
+   container paths in different services, and any remote/network path (hardlink implications).
+3. Configuration ownership - which file configures which service, and which of those hold secrets.
+4. Data flow - from acquisition to library to client, naming the actual paths at each hop.
+5. Interfaces - APIs and ports another tool could use (read vs write), and whether each is exposed
+   beyond localhost.
+6. Extension points - where a change would be safe (config, scripts) versus where it is risky
+   (schema, library files, vault notes).
+7. Unknowns - what you could not determine from the files, phrased as questions.
+
+Keep it compact. A useful map fits on one screen and cites file paths.`,
   instructionsPrompt: `Start from the compose file or the entrypoint, then follow the references.
 Use code_search/find_files to find config files rather than guessing names. For every claim, name the file and
 the line that supports it. Do not summarise a file you did not open.`,
