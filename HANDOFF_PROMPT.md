@@ -10,12 +10,15 @@ You are taking over verification of the freebuffpuff homelab pack on the user's 
 ## Context
 
 The pack is at: https://github.com/mnkdao-spec/freebuffpuff
-Branch: main (after pushing)
+Branch: freebuff/4a5fa7138c63de3fa0a5c3c6 - not merged to main yet, so clone with
+`git clone -b freebuff/4a5fa7138c63de3fa0a5c3c6 https://github.com/mnkdao-spec/freebuffpuff.git`
+to get the revision the counts below describe.
 Location on user's machine: wherever they clone it
 
 What was verified in sandbox:
-- tests/run.sh: 83/83 passed
-- tests/invariants.sh: 54/54 passed  
+- tests/run.sh: 100/100 passed
+- tests/invariants.sh: 55/55 passed
+- GitHub Actions on the pushed commit: both suites, bash -n and ShellCheck (pinned), all green
 - install.sh --verify: 39 skills, 5 agents valid
 - All scripts are read-only by construction
 - Agent tool allowlists corrected to documented vocabulary
