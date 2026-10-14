@@ -3,6 +3,8 @@
 # Changes nothing. Never runs docker compose up/down. Exit 0 always (findings are output, not errors).
 #
 # Usage: compose-doctor.sh [docker-compose.yml] [--json]
+#          --json prints ONE JSON object and nothing else (machine-readable), like the pack's
+#          other scripts. Text mode prints the human report.
 set -uo pipefail
 
 # Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
@@ -12,7 +14,17 @@ if [ -z "${PY:-}" ]; then
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
 if [ -z "$PY" ]; then echo "compose-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
-FILE="${1:-docker-compose.yml}"; MODE="${2:-}"
+# Flags in any order, like the other scripts in this pack (compose-doctor.sh --json FILE works).
+FILE=""; MODE=""
+for a in "$@"; do
+  case "$a" in
+    --json) MODE="--json" ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -*) echo "compose-doctor: unknown flag: $a" >&2; exit 2 ;;
+    *) [ -z "$FILE" ] && FILE="$a" ;;
+  esac
+done
+FILE="${FILE:-docker-compose.yml}"
 [ -f "$FILE" ] || { echo "compose-doctor: no such file: $FILE" >&2; exit 2; }
 
 RESOLVED=""
@@ -93,8 +105,36 @@ for name, vols in mounts.items():
         if re.match(r'^(\\\\|[A-Za-z]:[\\\\/])', src) or ":" in src and "//" in src:
             add("INFO", "%s: %s looks like a remote/UNC path. Hardlink and atomic-move support "
                         "depends on the server and mount; verify before relying on it." % (name, src))
-        if re.search(r'/(downloads|download|staging)/?$', src) and re.search(r'/(media|music|library)/?$', src):
-            pass
+# 3b. hardlink precondition: are the download root and the library root ONE filesystem?
+#     "Use Hardlinks Instead of Copy" silently degrades to copy when they are not - and the
+#     copy deletes the source, so the seeding torrent dies. Check it here when the host paths
+#     are visible; otherwise say exactly how to check it where they are (inside the container).
+def _dev(p):
+    try: return os.stat(p).st_dev
+    except OSError: return None
+
+_dl = sorted({src for v in mounts.values() for src, tgt, ro, typ in v
+              if src and typ == "bind" and re.search(r'/(downloads|download|staging|incomplete|temp)/?$', src)})
+_lib = sorted({src for v in mounts.values() for src, tgt, ro, typ in v
+               if src and typ == "bind" and re.search(r'/(media|music|library)/?$', src)})
+for a_path in _dl:
+    for b_path in _lib:
+        if a_path == b_path: continue
+        da, db = _dev(a_path), _dev(b_path)
+        if da is None or db is None:
+            add("INFO", "hardlinks between %s and %s cannot be checked from here (path not visible "
+                        "on this host). Verify where the files actually are: "
+                        "docker compose exec <lidarr> stat -c '%%d %%n' <file under %s> and the same "
+                        "file as <slskd> sees it under %s - equal device numbers are the precondition "
+                        "for a hardlink." % (a_path, b_path, b_path, a_path))
+        elif da != db:
+            add("WARN", "%s (device %s) and %s (device %s) are on DIFFERENT filesystems. Lidarr cannot "
+                        "hardlink across them: 'Use Hardlinks Instead of Copy' will fall back to copy "
+                        "and delete the download, and a move can fail with 'Invalid cross-device link'. "
+                        "Put the download root and the library root on one filesystem." % (a_path, da, b_path, db))
+        else:
+            add("OK", "%s and %s are on the same filesystem (device %s) - hardlinks are possible, so "
+                      "Lidarr can import without copying." % (a_path, b_path, da))
 
 # 4. uid/gid/umask coherence
 puids = {v.get("PUID") for v in ids.values() if v.get("PUID")}
@@ -125,14 +165,18 @@ for name, s in svcs.items():
         add("INFO", "%s depends_on without condition: service_healthy - ordering waits for start, "
                     "not readiness." % name)
 
-print("compose-doctor: %s" % os.path.abspath(path))
-for n in notes: print("  note: %s" % n)
-if not findings:
-    print("  no structural findings.")
-for level, msg in findings:
-    print("  [%s] %s" % (level, msg))
-print("  services: %s" % ", ".join(sorted(svcs)) if svcs else "  (none parsed)")
 if mode == "--json":
-    print(json.dumps({"findings": [{"level": l, "message": m} for l, m in findings], "notes": notes}))
+    # One JSON object and nothing else, so this is safe to pipe into jq.
+    print(json.dumps({"tool": "compose-doctor", "file": os.path.abspath(path),
+                      "findings": [{"level": l, "message": m} for l, m in findings],
+                      "notes": notes}, indent=2))
+else:
+    print("compose-doctor: %s" % os.path.abspath(path))
+    for n in notes: print("  note: %s" % n)
+    if not findings:
+        print("  no structural findings.")
+    for level, msg in findings:
+        print("  [%s] %s" % (level, msg))
+    print("  services: %s" % (", ".join(sorted(svcs)) if svcs else "(none parsed)"))
 PY
-echo "compose-doctor: read-only; nothing was changed."
+[ "$MODE" = "--json" ] || echo "compose-doctor: read-only; nothing was changed."

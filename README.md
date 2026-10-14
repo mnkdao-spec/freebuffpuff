@@ -9,11 +9,12 @@ knowledge base** (Obsidian/plain Markdown), a **Proxmox VE homelab** hosting all
 prompts · 4 ops files + 4 runbooks.** Everything read-only by default.
 
 ```
-./install.sh --project .            # into ./.agents/skills + knowledge.md + .codebuffignore
-./install.sh --global               # into ~/.agents/skills + ~/.knowledge.md
+./install.sh --project .            # into ./.agents/skills + ./.agents/*.ts + knowledge.md + .codebuffignore
+./install.sh --global               # into ~/.agents/skills + ~/.agents/*.ts + ~/.knowledge.md
 ./install.sh --both                 # both
-./install.sh --verify               # validate all 39 skills, change nothing
+./install.sh --verify               # validate all 39 skills and 5 agents, change nothing
 ./install.sh --project . --mcp local-readonly    # adds ./.agents/mcp.json (opt-in, GET-only)
+bash tests/run.sh                   # re-verify every script yourself (77 checks)
 ```
 
 ## What's inside
@@ -38,7 +39,10 @@ scripts (8)           compose-doctor · slskd-doctor · nsp-lint · lib-audit ·
                       -> all read-only, all executed and verified before shipping
 mcp/                  local-readonly server (10 GET-only tools) + risk-ranked third-party shortlist
 agents/               5 read-only TS agents: Repo Cartographer, Verifier, Library Auditor,
-                          Proxmox Auditor, Site QA
+                          Proxmox Auditor, Site QA. install.sh copies them to .agents/*.ts
+                          (+ .agents/types/), which IS trust-gated - expect one prompt
+tests/                run.sh: the verification harness. Builds fixtures, installs into a
+                          scratch repo, runs every script and asserts the findings
 prompts/              01-interview · 02-plan · 03-implement · 04-verify · 05-handoff
                       · 06-infra-change · 07-release-day
 ops/                  taskboard · progress · decisions · homelab-inventory
@@ -84,8 +88,8 @@ tracks, gigs and posts), self-hosted behind Caddy on the same box, with:
 
 | Script | What it does | Proof it works |
 |---|---|---|
-| `compose-doctor.sh` | flags the same host path mounted at different container paths, named-volume vs bind, UID/GID/umask incoherence, `SLSKD_UMASK` misuse, VPN sidecar networking, `depends_on` without health | caught a real slskd `/downloads` vs Lidarr `/data/downloads` mismatch in a fixture |
-| `lib-audit.sh` | tag completeness, codec/bitrate anomalies, extension-vs-codec mismatch, FLAC integrity, duplicate candidates (optionally content-hashed) | detected a corrupt FLAC, a `.mp3` that reports as FLAC, a 64 kbps file, missing tags, a byte-identical duplicate |
+| `compose-doctor.sh` | flags the same host path mounted at different container paths, named-volume vs bind, UID/GID/umask incoherence, `SLSKD_UMASK` misuse, VPN sidecar networking, `depends_on` without health, and whether the download root and library root are **one filesystem** (the hardlink precondition) | caught a real slskd `/downloads` vs Lidarr `/data/downloads` mismatch; reported same-device as OK and cross-device as a WARN, and said exactly how to check a path it cannot see |
+| `lib-audit.sh` | tag completeness, codec/bitrate anomalies, extension-vs-codec mismatch, FLAC integrity, duplicate candidates (optionally content-hashed). Needs `ffprobe`/`metaflac`/`flac`; when a tool is missing it prints `NOT RUN` for those checks instead of guessing | detected a corrupt FLAC, a truncated 0.4 s track, a 0-length file, a 96 kbps file and missing tags **with** the toolchain; with **none** of it installed it exits 0, names every skipped check, and invents no findings |
 | `nsp-lint.sh` | validates Navidrome `.nsp` smart-playlist JSON structure and vocabulary | rejects a bad rule tree and a 250% `limitPercent`; accepts a valid playlist |
 | `mb-lookup.sh` | MusicBrainz lookups with enforced 1 req/s (serialised across processes), caching, 503 backoff, `classify` for the release-vs-release-group trap | request starts measured >=1.1 s apart; cache hit is instant |
 | `slskd-doctor.sh` | read-only GETs for session/server/shares/transfer state, with an interpretation guide | reports per-endpoint status; treats 404 as "not in this version" |
@@ -149,6 +153,16 @@ metadata until used, `knowledge.md` stays short because it is paid every turn, s
 output, and `ops/` makes a session ending cheap to recover from. Details and a model-routing table:
 [`docs/token-budget.md`](docs/token-budget.md).
 
+## Re-verifying it yourself
+
+`bash tests/run.sh` is the harness these tables were produced with. It builds fake PVE, compose,
+`.nsp`, music, site and audio-toolchain fixtures under `/tmp/freebuff-pack-verify`, installs the pack
+into a scratch repo with `--force` (so it always tests *your current copy*, never a stale install),
+runs all 8 scripts **from `.agents/skills/*/scripts/`** the way an agent would, and asserts the
+findings - including the negative cases (a clean config must produce no warning, no `ffprobe` must
+produce no traceback). It exits non-zero if anything fails, and turns a genuinely useful script into
+a falsifiable one. The MusicBrainz section needs network; it skips loudly when unreachable.
+
 ## Honest limitations
 
 1. **The Proxmox scripts were verified against fixtures and a shimmed `pvesh`, not on a live PVE
@@ -156,15 +170,19 @@ output, and `ops/` makes a session ending cheap to recover from. Details and a m
    confirm the JSON shape of a `pvesh get` endpoint on your version the first time you run them.
 2. **The website tooling is static-only.** No browser automation was available, so nothing here has
    rendered a page, run Lighthouse, or driven a keyboard.
-3. **Custom `.ts` agents are unverified on Freebuff.** Documented for Codebuff; the sandbox could not
-   get past the trust prompt. They load correctly under Node's type stripping, and nothing else
-   depends on them.
+3. **Custom `.ts` agents are only half-verified.** `install.sh` copies them and `--verify` loads each
+   one under Node's type stripping (so a syntax error fails the install), but whether *Freebuff*
+   registers and runs them could not be tested - that needs a signed-in session past the trust
+   prompt. Nothing else in the pack depends on them.
 4. **Model-facing behaviour is unverified.** Whether a model *auto-selects* a skill by description
    cannot be tested without a signed-in turn. `probe/USER-CHECKLIST.md` settles it in 10 minutes.
 5. **Desktop parity is unverified** - the same `.agents/` tree is likely shared, but that is a guess.
 6. **Time-sensitive content.** Model names, prices, framework majors, CDN limits and Proxmox versions
    change. The pack states *how* to check rather than pinning a catalogue.
-7. **Not medical, legal or financial advice**, and nothing here advises on the legality of any
+7. **`lib-audit.sh` reports only what your box can measure.** Codec/duration/bitrate checks need
+   `ffprobe` (ffmpeg) and the FLAC integrity test needs `flac`; a minimal container may have neither.
+   The script says which checks it skipped rather than reporting a library full of "duration 0".
+8. **Not medical, legal or financial advice**, and nothing here advises on the legality of any
    content.
 
 ## Adapting it

@@ -28,6 +28,7 @@ AUDIO = {".flac",".mp3",".m4a",".aac",".ogg",".opus",".wav",".aiff",".aif",".ape
 have_ffprobe = shutil.which("ffprobe") is not None
 have_metaflac = shutil.which("metaflac") is not None
 have_flac = shutil.which("flac") is not None
+can_tag = have_ffprobe or have_metaflac
 
 files, others, nsp = [], [], []
 for dirpath, dirnames, filenames in os.walk(root):
@@ -58,10 +59,12 @@ def tags(p):
             if "=" in line:
                 k, v = line.split("=", 1); k = k.upper()
                 t.setdefault(k, []).append(v)
-    else:
-        r = subprocess.run(["ffprobe","-v","error","-show_entries","format_tags","-of","json",p],
-                           capture_output=True, text=True)
+    elif have_ffprobe:
+        # Only call ffprobe when it exists: on a box without the CLI (or without file) this
+        # used to abort the whole audit with a FileNotFoundError traceback.
         try:
+            r = subprocess.run(["ffprobe","-v","error","-show_entries","format_tags","-of","json",p],
+                               capture_output=True, text=True)
             for k, v in (json.loads(r.stdout or "{}").get("format", {}).get("tags", {}) or {}).items():
                 t.setdefault(k.upper(), []).append(str(v))
         except Exception: pass
@@ -81,9 +84,13 @@ for p in sorted(files):
     codec = (st.get("codec_name") or "").lower()
     dur = float(fmt.get("duration") or 0); br = int(fmt.get("bit_rate") or 0)
     t = tags(p)
-    for need in ("ARTIST","ALBUM","ALBUMARTIST","TITLE","TRACKNUMBER"):
-        if not t.get(need): rep["missing_tags"][need] += 1
-    if dur < 1: rep["anomalies"].append((p, "duration %s - unreadable, zero-length or truncated" % dur))
+    if can_tag:
+        for need in ("ARTIST","ALBUM","ALBUMARTIST","TITLE","TRACKNUMBER"):
+            if not t.get(need): rep["missing_tags"][need] += 1
+    # With no ffprobe there is no duration or codec data at all: every file would look like
+    # "duration 0". Skipping is honest; flagging all of them is a false-positive storm.
+    if have_ffprobe and dur < 1:
+        rep["anomalies"].append((p, "duration %s - unreadable, zero-length or truncated" % dur))
     if codec in CODEC_EXT and ext not in CODEC_EXT[codec]:
         rep["ext_mismatch"].append((p, "extension %s but codec %s" % (ext, codec)))
     if codec == "mp3" and 0 < br < 128000: rep["anomalies"].append((p, "low bitrate %d kbps" % (br//1000)))
@@ -112,7 +119,10 @@ for sig, group in by_sig.items():
                         for chunk in iter(lambda: fh.read(1 << 20), b""): h.update(chunk)
                     hashes.add(h.hexdigest())
                 except OSError: hashes.add("unreadable")
-        verdict = ("IDENTICAL CONTENT" if len(hashes) == 1 else "same size/duration, different bytes") if dohash else "same size+duration (run with --hash to confirm)"
+        if dohash:
+            verdict = "IDENTICAL CONTENT" if len(hashes) == 1 else ("same size/duration, different bytes" if have_ffprobe else "same size, different bytes")
+        else:
+            verdict = "same size+duration (run with --hash to confirm)" if have_ffprobe else "same size only - no ffprobe, so duration was not compared (run with --hash to confirm)"
         rep["dupes"].append((group, verdict))
 
 print("lib-audit: %s" % os.path.abspath(root))
@@ -120,10 +130,19 @@ print("  audio files scanned : %d%s" % (rep["scanned"], "" if len(files) < maxn 
 print("  non-audio files     : %d" % len(others))
 print("  smart playlists     : %d (.nsp)" % len(nsp))
 print("  tools: ffprobe=%s metaflac=%s flac=%s" % (have_ffprobe, have_metaflac, have_flac))
+_missing = []
+if not have_ffprobe: _missing.append("duration / codec / sample-rate / bitrate -> install ffmpeg (ffprobe)")
+if not can_tag:       _missing.append("tag completeness -> install metaflac (flac) or ffmpeg (ffprobe)")
+if not have_flac:     _missing.append("FLAC integrity test -> install the flac CLI")
+for _m in _missing: print("  NOT RUN: %s" % _m)
 print()
-print("TAG COMPLETENESS (files missing the tag):")
-for k, v in rep["missing_tags"].most_common():
-    print("  %-12s %d  (%.0f%%)" % (k, v, 100.0*v/max(rep["scanned"],1)))
+if can_tag:
+    print("TAG COMPLETENESS (files missing the tag):")
+    for k, v in rep["missing_tags"].most_common():
+        print("  %-12s %d  (%.0f%%)" % (k, v, 100.0*v/max(rep["scanned"],1)))
+else:
+    print("TAG COMPLETENESS: not measured (no tag reader installed - see NOT RUN above).")
+    print("  This is NOT a finding about your library.")
 print()
 print("FLAC INTEGRITY FAILURES: %d" % len(rep["flac_bad"]))
 for p, e in rep["flac_bad"][:20]: print("  %s  %s" % (p, e))

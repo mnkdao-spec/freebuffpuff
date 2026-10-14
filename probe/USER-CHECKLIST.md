@@ -47,10 +47,11 @@ curl -s -H "X-API-Key: $SLSKD_API_KEY"  http://localhost:5030/api/v0/server | he
       report, not something to work around.
 
 ## 5. Optional: the risky tier
-- [ ] Copy `agents/*.ts` into `.agents/` (and `agents/types/agent-definition.d.ts` into
-      `.agents/types/`), restart, then type `@` — the display names `Repo Cartographer`, `Verifier`
-      and `Library Auditor` should autocomplete. **This is the tier that was not verifiable in the
-      sandbox.** If they do not appear, delete `.agents/*.ts`; you lose only this tier.
+- [ ] The installer already placed `.agents/*.ts` (check with `ls .agents/*.ts`). Answer the trust
+      prompt, restart, then type `@` — the display names `Repo Cartographer`, `Verifier`,
+      `Library Auditor`, `Proxmox Auditor` and `Site QA` should autocomplete. **This is the tier
+      that was not verifiable in the sandbox.** If they do not appear, delete `.agents/*.ts`; you
+      lose only this tier.
 
 ## 6. Do the Proxmox scripts work on your host? (run on the PVE host, or over SSH)
 ```bash

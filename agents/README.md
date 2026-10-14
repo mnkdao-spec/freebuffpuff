@@ -15,13 +15,18 @@ read-only scripts (a build writes to its output directory; neither edits source 
 hypervisor).
 
 ## Install
+`install.sh` copies these for you — `./install.sh --project .` writes `.agents/*.ts` and
+`.agents/types/agent-definition.d.ts`, and `--verify` loads every one under Node so a syntax error
+fails the install. By hand it is the same three commands:
+
 ```bash
 mkdir -p .agents/types
 cp agents/*.ts .agents/
 cp agents/types/agent-definition.d.ts .agents/types/
 ```
-Then address them in the TUI with `@` and their display name (e.g. `@Verifier`). Freebuff has no
-`--agent` flag — that is Codebuff-only.
+Then answer the **trust prompt** (`.agents/*.ts` is trust-gated; skills are not) and address them in
+the TUI with `@` and their display name (e.g. `@Verifier`). Freebuff has no `--agent` flag — that is
+Codebuff-only.
 
 ## Checking the definitions load
 

@@ -25,7 +25,7 @@ check_line_endings() {
     case "$f" in *.sh|*.js) ;; *) continue ;; esac
     if head -c 4096 "$f" | grep -qU $'\r'; then bad="${bad}
   ${f}"; fi
-  done < <(find "$PACK_DIR/skills" "$PACK_DIR/mcp" -type f \( -name '*.sh' -o -name '*.js' \) -print0)
+  done < <(find "$PACK_DIR/skills" "$PACK_DIR/mcp" "$PACK_DIR/tests" -type f \( -name '*.sh' -o -name '*.js' \) -print0 2>/dev/null)
   if [ -n "$bad" ]; then
     say "error: these files have CRLF line endings and will not run:$bad"
     say ""
@@ -49,7 +49,7 @@ Options:
   --mcp NAME        install mcp/NAME.json as .agents/mcp.json (never overwrites)
   --force           overwrite existing skill files
   --dry-run         print what would happen, change nothing
-  --verify          validate the pack's skills only (frontmatter, naming, description)
+  --verify          validate the pack's skills (frontmatter, naming, description) and agents
   -h, --help        this message
 USAGE
 }
@@ -110,6 +110,32 @@ verify_pack() {
   [ "$bad" = 0 ]
 }
 
+# --- agent validation -------------------------------------------------------
+# Agents are plain ESM .ts files. Loading one in Node is the real test: it catches a syntax
+# error or an unterminated template literal, which a grep for "export default" would not.
+agent_loads() {
+  command -v node >/dev/null 2>&1 || return 0
+  node -e 'const {pathToFileURL}=require("node:url");
+    import(pathToFileURL(process.argv[1]).href)
+      .then(() => process.exit(0), e => { console.error(e && e.message); process.exit(1); });' "$1" 2>/dev/null
+}
+
+verify_agents() {
+  local bad=0 total=0 f base
+  for f in "$PACK_DIR"/agents/*.ts; do
+    [ -e "$f" ] || continue
+    total=$((total+1)); base="$(basename "$f")"
+    if ! grep -qE 'export[[:space:]]+default' "$f"; then
+      say "  INVALID agent $base: no 'export default'"; bad=$((bad+1)); continue
+    fi
+    if ! agent_loads "$f"; then
+      say "  INVALID agent $base: does not load as an ES module"; bad=$((bad+1))
+    fi
+  done
+  say "validated $total agents, $bad invalid"
+  [ "$bad" = 0 ]
+}
+
 # --- installers -------------------------------------------------------------
 copy_skill() {
   local src="$1" dest_root="$2" name dest
@@ -127,6 +153,27 @@ install_skills() {
   [ "$DRY" = 1 ] || mkdir -p "$dest_root"
   while IFS= read -r -d '' f; do copy_skill "$(dirname "$f")" "$dest_root"; done \
     < <(find "$SKILLS_SRC" -name SKILL.md -print0 | sort -z)
+}
+
+install_agents() {
+  local dest_dir="$1" f n
+  act "agents -> $dest_dir (.ts, plus types/)"
+  [ "$DRY" = 1 ] && return 0
+  mkdir -p "$dest_dir" "$dest_dir/types"
+  for f in "$PACK_DIR"/agents/*.ts; do
+    [ -e "$f" ] || continue
+    n="$(basename "$f")"
+    if [ -e "$dest_dir/$n" ] && [ "$FORCE" != 1 ]; then act "skip (exists): $n"; continue; fi
+    cp "$f" "$dest_dir/$n"; act "install agent: $n"
+  done
+  # .d.ts is NOT listed as an agent file by the CLI (it is a type declaration), which is why
+  # it lives in types/ - the agents' `import type` line is erased at load time either way.
+  for f in "$PACK_DIR"/agents/types/*; do
+    [ -e "$f" ] || continue
+    n="$(basename "$f")"
+    if [ -e "$dest_dir/types/$n" ] && [ "$FORCE" != 1 ]; then continue; fi
+    cp "$f" "$dest_dir/types/$n"; act "install agent types: $n"
+  done
 }
 
 install_support() {
@@ -217,7 +264,12 @@ install_mcp() {
 }
 
 # --- run --------------------------------------------------------------------
-if [ "$VERIFY_ONLY" = 1 ]; then verify_pack; exit $?; fi
+if [ "$VERIFY_ONLY" = 1 ]; then
+  vbad=0
+  verify_pack   || vbad=1
+  verify_agents || vbad=1
+  exit $vbad
+fi
 
 say "Freebuff Homelab Pack -> $(norm_path "$PACK_DIR")"
 case "$(uname -s 2>/dev/null || echo unknown)" in
@@ -229,7 +281,8 @@ esac
 say "platform: $PLATFORM"
 say ""
 say "validate:"
-verify_pack || die "pack validation failed; nothing installed"
+verify_pack   || die "pack validation failed; nothing installed"
+verify_agents || die "agent validation failed; nothing installed"
 check_line_endings
 say ""
 
@@ -237,6 +290,7 @@ if [ "$DO_PROJECT" = 1 ]; then
   say "PROJECT scope: $PROJECT_DIR"
   [ -d "$PROJECT_DIR" ] || die "project dir does not exist: $PROJECT_DIR"
   install_skills "$PROJECT_DIR/.agents/skills"
+  install_agents "$PROJECT_DIR/.agents"
   install_support "$PROJECT_DIR/.agents/ops" "$PROJECT_DIR/.agents/prompts"
   install_knowledge "$PROJECT_DIR/knowledge.md" "$PACK_DIR/templates/knowledge.md"
   install_agents_symlink "$PROJECT_DIR"
@@ -248,6 +302,7 @@ fi
 if [ "$DO_GLOBAL" = 1 ]; then
   say "GLOBAL scope: $HOME"
   install_skills "$HOME/.agents/skills"
+  install_agents "$HOME/.agents"
   install_support "$HOME/.freebuff-pack/ops" "$HOME/.freebuff-pack/prompts"
   install_knowledge "$HOME/.knowledge.md" "$PACK_DIR/templates/knowledge.global.md"
   install_mcp "$HOME/.agents"
@@ -267,9 +322,11 @@ cat <<'NEXT'
 Next steps
   1. Edit knowledge.md — fill in every <ANGLE BRACKET> with your real paths, service
      names, ports and commands. This file is the only always-loaded context; keep it short.
-  2. Skills under .agents/skills/ need no trust prompt. MCP servers do: the first run asks
-     "Load and run these? [y/N]" and shows the exact commands. Only answer y for configs you
-     have read. For a scripted/CI-ish run use:  freebuff --trust-agents
+  2. Skills under .agents/skills/ need no trust prompt. Agents (.agents/*.ts) and MCP servers
+     DO: the first run asks "Load and run these? [y/N]" and shows the exact commands. Read
+     them before answering y. Five read-only agents were installed (repo-cartographer,
+     verifier, library-auditor, proxmox-auditor, site-qa) - they only read files and report.
+     For a scripted/CI-ish run use:  freebuff --trust-agents
      (or export CODEBUFF_TRUST_AGENT_DIRS=1). Decisions persist in
      ~/.config/manicode/trusted-agent-dirs.json.
   3. In the TUI: /skill: to list skills, /plan before big changes, /model and /reasoning to
