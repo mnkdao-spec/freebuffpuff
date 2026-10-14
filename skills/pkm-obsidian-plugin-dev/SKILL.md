@@ -1,6 +1,6 @@
 ---
 name: pkm-obsidian-plugin-dev
-description: Develop or evaluate an Obsidian plugin - TypeScript structure, vault/workspace/metadata APIs, safe vault access, Local REST API and MCP bridge, security review before running. Use when writing a plugin, connecting an agent over Local REST API, installing a community plugin/template, or reviewing plugin capabilities.
+description: Develop or evaluate an Obsidian plugin - TypeScript plugin structure, the vault/workspace/metadata APIs, safe access to vault files, the Local REST API and MCP bridge for external agents, and the security review a plugin (or template) needs before it runs. Use when writing an Obsidian plugin, when connecting an agent to a vault over the Local REST API, when asked to install a community plugin or template, or when reviewing what a vault plugin can do.
 metadata:
   category: pkm
   stack: obsidian, typescript
@@ -8,38 +8,82 @@ metadata:
 
 # Obsidian plugin development and review
 
-Plugins run **in-app with user permissions** (filesystem + network).
+Obsidian itself is proprietary, but its plugin API is documented TypeScript, and plugins run
+**in the app with your user's permissions** — including filesystem and network access.
 
-## Shape
-`<vault>/.obsidian/plugins/<id>/`: `manifest.json` (**REQUIRED**: id, name, version,
-minAppVersion, **author**, description, isDesktopOnly; optional authorUrl/fundingUrl;
-`data.json` is runtime-written, not authored) + `main.js` (onload/onunload) + optional `styles.css`.
-**`author` missing = rejected.** `versions.json` **not** required (only minAppVersion pins).
-Release needs `main.js` + `manifest.json` (+`styles.css` iff used).
-
-## Rules
-1. **Vault API over Adapter/`fs`.** Background edits: `vault.process` (atomic) > `vault.modify`;
-   active note: **Editor** API; frontmatter: `FileManager.processFrontMatter()`; `this.app` > global.
-2. **Never delete/overwrite silently** (renames break links). 3. **Ask for less** (no undisclosed
-   network; no telemetry/ads; README discloses network + out-of-vault access).
-4. **`isDesktopOnly: true`** for Node APIs (mobile lacks them). 5. **Debounce** cache events.
-6. **Pin `minAppVersion`** to actual usage; re-check changelog on raises.
-
-## Agents and vaults
-- **Filesystem is the real interface** (Markdown on disk; no plugin needed).
-- **Official CLI** (1.12+) = vendor scripting path (needs app running).
-- **Local REST API** plugin (`obsidian-local-rest-api`): HTTPS + cert **and API key** (+MCP endpoint
-  with read/write/delete). **Can delete notes** — scope it, prefer read-only.
-- Never expose beyond localhost; never commit keys.
-
-## Security review before installing
-DataviewJS/Templater = executable code (Templater runs system cmds). Downloaded templates =
-programs with user rights. Check behavior/source/network/vault-out access. Can't read → sandbox or skip.
-
-## Output
+## Plugin shape
 ```
-TARGET / CAPABILITY / REVIEW / RECOMMEND / BUILD (cmds + bundle) / NOT DONE (nothing installed/enabled)
+<vault>/.obsidian/plugins/<id>/
+  manifest.json      REQUIRED: id, name, version, minAppVersion, author,
+                     description, isDesktopOnly
+                     optional: authorUrl, fundingUrl   (data.json is written by
+                     loadData/saveData — it is not a file you author)
+  main.js            bundle (entry: onload/onunload)
+  styles.css         optional (optional as a release asset too)
+src/main.ts          entry point in your dev repo
+```
+`author` is easy to forget and is **required**, so a manifest without it is rejected. A
+`versions.json` is **not** required: it only maps a plugin version to a `minAppVersion`, and you
+touch it when you raise `minAppVersion`. To publish, the GitHub release needs `main.js` and
+`manifest.json`; `styles.css` only if you use it. Verify the field list against the manifest
+reference rather than this list — it is the kind of thing that gains a field.
+
+Core plugin APIs worth knowing: the vault object (read/create/modify/**delete** files),
+the workspace (views, leaves, layout), and the metadata cache (frontmatter, links, tags,
+backlinks). Register a command; add a settings tab; register a view.
+
+Rules that keep plugins safe and maintainable:
+1. **Use the Vault API, not the Adapter API, and not raw `fs`.** For background edits prefer
+   `vault.process` (atomic) over the older `vault.modify`; for the *active* note use the **Editor**
+   API; for frontmatter use `FileManager.processFrontMatter()`. Reach for `this.app` rather than
+   the global `app`.
+2. **Never delete or overwrite a file silently.** A plugin that renames notes breaks every link.
+3. **Ask for less.** No network calls you did not tell the user about; no reading `.obsidian/`
+   secrets; no telemetry by default. The directory's developer policies prohibit client-side
+   telemetry and dynamically loaded ads, and require the README to disclose network use and any
+   access outside the vault.
+4. **`isDesktopOnly: true`** if you use Node APIs — otherwise mobile installs break (Node/Electron
+   APIs do not exist on mobile).
+5. **Debounce.** Metadata cache events fire constantly; a per-event full-vault scan is how vaults
+   get slow.
+6. **Version pin** `minAppVersion` to what you actually use, and re-read the changelog for breaking
+   API changes when you raise it — recent ones include `FileManager.generateMarkdownLink` no longer
+   prefixing `!` on attachments and a Bases `BaseOption#shouldHide` signature change.
+
+## What agents can and cannot do with a vault
+- **Filesystem is the real interface.** The vault is Markdown on disk; an agent editing files
+  directly is the most portable approach and needs no plugin at all.
+- **The official Obsidian CLI** is the vendor-supported programmatic path (public since 1.12): it
+  is documented for scripting, automation and integration with external tools, and it needs the
+  app running. If you would otherwise install a plugin just to let a script touch the vault, check
+  whether the CLI covers it first.
+- **Local REST API** (community plugin, id `obsidian-local-rest-api`) exposes an authenticated
+  local HTTP API and additionally documents a built-in MCP endpoint with read/write/delete, search,
+  and targeted edits such as patching a heading or a frontmatter field. It is still gated behind a
+  locally generated HTTPS certificate **and an API key** (only the health endpoint is
+  unauthenticated). Separate MCP servers that talk to that plugin also exist. **These can delete
+  notes** — scope them, prefer read-only, and treat write access as a privilege, not a convenience.
+- **Never expose a local API beyond localhost**, and never put its key in a prompt, a repo, or a
+  commit.
+
+## Security review before installing anything
+Dataview's JS mode and Templater's JavaScript **can execute code** — Templater can run system
+commands. A template downloaded from the internet is executable code with your user's rights.
+Community plugins get the same treatment as any dependency. Check: does the source match the
+claimed behaviour; does it phone home; does it write outside the vault; and can you state what
+it has access to. If you cannot read it, say so and recommend a sandbox or a different plugin.
+
+## Output format
+```
+TARGET:      plugin/template name, source URL, version
+CAPABILITY:  what it needs (vault write? network? shell? node?)
+REVIEW:      findings, or "cannot verify - source not readable"
+RECOMMEND:   install / do not install / install with these settings
+BUILD:       for dev - the exact commands and the resulting bundle path
+NOT DONE:    confirm you did not install or enable anything
 ```
 
 ## Never
-Install/enable unapproved; grant whole-vault write when a folder suffices; call sync "backup".
+- Install or enable a plugin or template on someone's vault without their approval.
+- Grant a write-capable agent access to a whole vault when one folder would do.
+- Tell a user their vault is "backed up" because it is synced. Sync propagates deletion.
