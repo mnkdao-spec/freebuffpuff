@@ -117,7 +117,7 @@ The pack includes 39 skills organized by domain. Each skill has a `SKILL.md` wit
 - **web-release-page**: Create music release pages with structured data
 - **web-performance-audit**: Core Web Vitals (LCP, INP, CLS) guidance
 
-**Key Notes**: User Astro content collections (defineCollection pattern). CWV thresholds match current web.dev guidance.
+**Key Notes**: Uses Astro content collections (defineCollection pattern). CWV thresholds match current web.dev guidance.
 
 ### PKM (pkm-*)
 
