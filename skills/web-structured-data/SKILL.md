@@ -1,36 +1,59 @@
 ---
 name: web-structured-data
-description: Add and validate schema.org JSON-LD and social metadata - MusicGroup, MusicAlbum, MusicRecording, MusicEvent - plus Open Graph/Twitter cards, canonical URLs, title/description hygiene. Use when publishing/editing release or gig pages, when previews look wrong, before announcements, or discoverability work.
+description: Add and validate schema.org JSON-LD and social metadata for a music project - MusicGroup, MusicAlbum, MusicRecording and MusicEvent - plus Open Graph/Twitter cards, canonical URLs and title/description hygiene. Use when publishing or editing a release or gig page, when search or social previews look wrong, before announcing a release, or when asked to make the site more discoverable.
 metadata:
   category: web
 ---
 
 # Structured data and social metadata
 
-| Type | Page | Key props |
+## Types and the properties that matter
+| Type | Use on | Key properties |
 |---|---|---|
-| `MusicGroup` | artist page | `name`, `url`, `image`, `sameAs[]`, `genre`, `member` |
-| `MusicAlbum` | release page | `name`, `byArtist`, `datePublished`, `image`, `numTracks`, `albumReleaseType`, `track[]` |
-| `MusicRecording` | track / inside `track[]` | `name`, `byArtist`, `duration` (ISO8601 `PT3M42S`), `isrcCode`, `inAlbum` |
-| `MusicEvent` | one gig page | `name`, `startDate` **with offset**, `location` (Place+address), `performer`, `offers`, `eventStatus` |
+| `MusicGroup` | the artist/project page | `name`, `url`, `image`, `sameAs[]` (streaming/social), `genre`, `member` |
+| `MusicAlbum` | a release page | `name`, `byArtist`, `datePublished`, `image`, `numTracks`, `albumReleaseType`, `track[]` |
+| `MusicRecording` | a track, or inside `track[]` | `name`, `byArtist`, `duration` (ISO 8601, e.g. `PT3M42S`), `isrcCode`, `inAlbum` |
+| `MusicEvent` | one gig page | `name`, `startDate` **with timezone offset**, `location` (`Place` with `name` + `address`), `performer`, `offers`, `eventStatus` |
 
-- **Mark up only visible content.** Contradicting markup = policy problem.
-- JSON-LD in **built HTML** (client-injected markup isn't reliably seen).
-- `startDate` needs offset (`2026-11-03T20:00:00+01:00`). Past gigs: keep page, honest status.
+Rules that keep the markup honest:
+- **Only mark up what is visible on the page.** Structured data that contradicts the page is a
+  policy problem, not a clever trick.
+- Put JSON-LD in the **built HTML**. Markup injected by client-side JavaScript is not reliably seen.
+- `startDate` needs the offset (`2026-11-03T20:00:00+01:00`), or the date is ambiguous.
+- Past gigs: keep the page and set `eventStatus`/dates honestly rather than deleting it.
 
-## Valid ≠ rich result
-Correct vocabulary ≠ Google rich-result eligibility. Event feature wants **one page per event**
-(tour overviews don't qualify); Google may decline anyway; markup alone doesn't rank. Say so aloud.
+## The gap between "valid" and "shows a rich result"
+Important, and routinely over-promised: the schema.org vocabulary being correct does not make a
+page eligible for a Google rich result. Google's Event feature wants **a unique page focused on one
+event** with accurate date and location - a tour-overview listing many shows does not meet that
+page-focus guidance. Google may decline to show a rich result even for valid markup, and structured
+data does not by itself raise rankings. Say this out loud instead of promising rich results.
 
-## Social metadata (per page)
-`<title>` (≤~60 chars), description (one honest sentence), `canonical`, `og:title/description/image`
-(**absolute** image URL)/`og:url`/`og:type`, `twitter:card`. Dedicated 1200x630 social image —
-square covers crop badly.
+## Social preview metadata (per page)
+```html
+<title>Release title — Artist (<= ~60 chars)</title>
+<meta name="description" content="One honest sentence.">
+<link rel="canonical" href="https://your-domain/releases/<slug>/">
+<meta property="og:title" content="..."><meta property="og:description" content="...">
+<meta property="og:image" content="https://your-domain/art/<slug>-og.jpg">  <!-- absolute URL -->
+<meta property="og:url" content="https://your-domain/releases/<slug>/">
+<meta property="og:type" content="music.album">
+<meta name="twitter:card" content="summary_large_image">
+```
+Use a dedicated social image (roughly 1200x630, JPG/PNG) - not the square cover art, which crops
+badly in most previews.
 
-## Verify
-`site-audit.sh dist` (parses every JSON-LD block) + Rich Results Test + schema validator on the
-**public URL** + Search Console later. Record which validator — "valid" needs a source.
+## Verify, don't assume
+```bash
+bash .agents/skills/web-perf-a11y/scripts/site-audit.sh dist          # parses every JSON-LD block
+curl -sS https://your-domain/releases/<slug>/ | grep -o 'application/ld+json' | wc -l
+```
+Then use Google's Rich Results Test and the schema.org validator on the **public URL**, and check
+the live page in Search Console later. Record which validator you used - "valid" claims need a
+source.
 
 ## Hard rules
-Never promise rich results ("validates" ≠ "eligible"). Never fabricate ratings/reviews/ISRCs/dates.
-One canonical URL per page.
+- Never claim a rich result. Report "markup validates" and "not eligible for the Event feature
+  because the page lists many events" as different findings.
+- Do not fabricate `aggregateRating`, reviews, ISRCs or release dates to satisfy a validator.
+- One canonical URL per page; do not leave two pages competing for the same release.
