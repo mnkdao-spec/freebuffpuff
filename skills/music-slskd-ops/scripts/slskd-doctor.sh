@@ -10,21 +10,28 @@ if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "slskd-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "slskd-doctor: needs python3 (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 BASE="${SLSKD_URL:-http://localhost:5030}"
 KEY="${SLSKD_API_KEY:-}"
 if [ -z "$KEY" ]; then
   echo "slskd-doctor: SLSKD_API_KEY is not set. Export a READ-ONLY key (not the admin key)." >&2
   exit 2
 fi
+# curl writes each response body to a file. It must not be a fixed path in /tmp: a predictable
+# filename can be pre-created as a symlink by any local user, and `curl -o` would then truncate and
+# overwrite whatever the link points at - a file belonging to whoever runs this. mktemp creates it
+# exclusively with a 0600 mode, and the trap removes it on every exit path.
+BODY="$(mktemp "${TMPDIR:-/tmp}/slskd-body.XXXXXX" 2>/dev/null || echo /dev/null)"
+trap 'rm -f "$BODY"' EXIT
+
 probe() {
   local path="$1" desc="$2"
   local out code
-  out="$(curl -sS -m 10 -o /tmp/.slskd-body -w '%{http_code}' -H "X-API-Key: $KEY" "$BASE$path" 2>/dev/null)"
+  out="$(curl -sS -m 10 -o "$BODY" -w '%{http_code}' -H "X-API-Key: $KEY" "$BASE$path" 2>/dev/null)"
   code="${out:-000}"
   printf '  %-34s %-4s %s\n' "$path" "$code" "$desc"
   if [ "$code" = "200" ]; then
-    head -c 400 /tmp/.slskd-body | "$PY" -c 'import json,sys;d=sys.stdin.read();
+    head -c 400 "$BODY" | "$PY" -c 'import json,sys;d=sys.stdin.read();
 try: print("      ->", json.dumps(json.loads(d))[:300])
 except Exception: print("      ->", d.replace("\n"," ")[:200])' 2>/dev/null || true
   fi

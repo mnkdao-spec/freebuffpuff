@@ -23,9 +23,31 @@ Install it with:
 ./install.sh --project . --mcp local-readonly      # writes .agents/mcp.json
 export ND_USER=... ND_TOKEN=... ND_SALT=... LIDARR_API_KEY=... SLSKD_API_KEY=... \
        MB_USER_AGENT="freebuff-homelab-pack/1.0 (you@example.com)"   # put these in ~/.bashrc
+# Optional, both for tightening/testing rather than normal use:
+#   MB_URL=https://musicbrainz.example.org      # a MusicBrainz mirror
+#   MCP_ALLOWED_HOSTS=music.lan:4533,mb.lan     # replaces the derived host allowlist entirely
 ```
 Use a **ReadOnly** slskd API key here. The installer substitutes its own absolute path into the
 fragment (`__PACK_DIR__`), so **if you move the pack directory, re-run the installer**.
+
+### What "read-only" is enforced to mean
+
+The bridge is not read-only because its tool list looks harmless. Four properties are enforced in
+code, and the two a real homelab can never exercise are asserted against a local fixture by
+`tests/run.sh`:
+
+| Property | Enforced by | Proven by |
+|---|---|---|
+| only `GET` is ever issued | one `fetch()` call site, hardcoded `method: 'GET'`, `redirect: 'error'` | `tests/invariants.sh` compares the call sites |
+| every request is built through the allowlist | `httpGet()` resolves the URL via `assertAllowed()` | `tests/invariants.sh` + a refusal that must open **no** socket |
+| response size is bounded | the body is read in chunks and the stream cancelled at 6000 bytes | `tests/run.sh`: a 20 MiB body is cut and ~0.6 MB reaches the wire |
+| upstream failures are errors | any non-2xx response throws, so the call returns `isError` | `tests/run.sh`, against a fixture that answers `500` |
+
+`MCP_ALLOWED_HOSTS` replaces the derived allowlist outright. That is what makes the refusal path
+reachable at all (`MCP_ALLOWED_HOSTS=example.invalid` must refuse every tool), and it is how you
+tighten the list after moving a service behind a proxy. Search terms sent to MusicBrainz are escaped
+as Lucene phrases, so a quote in an artist name cannot rewrite the query into something else and
+return silently wrong results.
 
 ## Third-party servers: a risk-ranked shortlist
 

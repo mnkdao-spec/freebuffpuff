@@ -31,10 +31,17 @@ while [ $# -gt 0 ]; do case "$1" in
   *) VMID="$1" ;;
 esac; shift; done
 
+# `pct config` output goes to a scratch file. mktemp gives it a 0600 mode and a unique name, and it
+# has to be removed on EVERY exit path - this used to leak one /tmp file per run.
+TMP_CONF=""
+cleanup() { if [ -n "$TMP_CONF" ]; then rm -f "$TMP_CONF"; fi; }
+trap cleanup EXIT
+
 if [ -z "$CONF" ] && [ -n "$VMID" ]; then
   if command -v pct >/dev/null 2>&1; then
-    CONF="$(mktemp)"; pct config "$VMID" > "$CONF" 2>/dev/null || true
-    [ -s "$CONF" ] || { rm -f "$CONF"; CONF="$PVE_ETC/lxc/$VMID.conf"; }
+    TMP_CONF="$(mktemp)"; CONF="$TMP_CONF"
+    pct config "$VMID" > "$CONF" 2>/dev/null || true
+    if [ ! -s "$CONF" ]; then rm -f "$CONF"; TMP_CONF=""; CONF="$PVE_ETC/lxc/$VMID.conf"; fi
   else
     CONF="$PVE_ETC/lxc/$VMID.conf"
   fi
@@ -67,10 +74,15 @@ for line in lines:
         k, v = s.split(":", 1)
         cfg.setdefault(k.strip(), []).append(v.strip())
 
-name = (cfg.get("hostname") or [os.path.basename(conf)])[0]
+# The container's own `hostname:` is authoritative; without one, name it from its ID. It must NOT
+# fall back to the config filename: when the config came from `pct config <id>` that file is a random
+# mktemp name, so the report used to read "hostname tmp.uBUZt2bL4W" for a real container.
+base = os.path.basename(conf)
+label = vmid or (base[:-5] if base.endswith(".conf") else base)
+name = (cfg.get("hostname") or [""])[0].strip() or (("ct" + vmid) if vmid else label)
 unpriv = (cfg.get("unprivileged") or ["0"])[0]
 features = (cfg.get("features") or [""])[0]
-add("INFO", "identity", "container %s, hostname %s, config %s" % (vmid or os.path.basename(conf), name, conf))
+add("INFO", "identity", "container %s, hostname %s, config %s" % (label, name, conf))
 
 # --- privilege surface ------------------------------------------------------
 if unpriv == "1":

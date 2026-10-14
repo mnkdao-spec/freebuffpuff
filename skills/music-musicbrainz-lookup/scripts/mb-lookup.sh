@@ -2,7 +2,8 @@
 # mb-lookup.sh - READ-ONLY MusicBrainz lookups with enforced rate limiting.
 # MusicBrainz requires <= 1 request/second per client and a meaningful User-Agent.
 # This script serialises requests across processes sharing an IP, caches responses,
-# and backs off on 503. It never writes to MusicBrainz.
+# and backs off on 503. It never writes to MusicBrainz. Its only writes are $CACHE (per-user,
+# created 0700/0600) and the rate-limit state file; no other path is touched.
 #
 # Usage:
 #   mb-lookup.sh whoami
@@ -19,12 +20,25 @@ if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "mb-lookup: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "mb-lookup: needs python3 (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 
 UA="${MB_USER_AGENT:-freebuff-homelab-pack/1.0 ( https://example.invalid/contact )}"
-CACHE="${MB_CACHE_DIR:-/tmp/mb-cache}"; STATE="${MB_RATE_STATE:-/tmp/.mb-last-request}"
+# The cache holds raw API responses, so it belongs in the user's own cache directory. The old
+# default, /tmp/mb-cache, was a predictable world-writable path: any local user could plant a
+# response under a key and this script would serve it as a cache hit. MB_CACHE_DIR overrides it.
+CACHE="${MB_CACHE_DIR:-${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/freebuff-homelab-pack/mb}"
+# The rate-limit state is the opposite case: it is deliberately SHARED between processes on this
+# host, because MusicBrainz limits per client IP and two concurrent agents must not each spend the
+# 1 req/s budget. It holds one timestamp, it is validated before use, and MB_RATE_STATE overrides it.
+STATE="${MB_RATE_STATE:-/tmp/.mb-last-request}"
 MIN_INTERVAL="${MB_MIN_INTERVAL:-1.1}"
+umask 077                                  # cache, state and the response scratch file stay private
 mkdir -p "$CACHE"
+# curl writes the body here rather than to the predictable, shareable /tmp/.mb-body: an attacker
+# could pre-create that path as a symlink and have us overwrite a file we own. mktemp creates this
+# one exclusively and inside $CACHE, and the trap removes it on every exit path.
+BODY="$(mktemp "$CACHE/body.XXXXXX" 2>/dev/null || echo /dev/null)"
+trap 'rm -f "$BODY"' EXIT
 
 command -v curl >/dev/null || { echo "mb-lookup: curl required" >&2; exit 2; }
 JQ="$(command -v jq || true)"
@@ -48,7 +62,9 @@ get() { # get <path-with-query>
       exec 9>"$STATE.lock"; flock 9
       if [ -f "$STATE" ]; then
         local last now wait
-        last="$(cat "$STATE" 2>/dev/null || echo 0)"; now="$(date +%s%N)"
+        last="$(cat "$STATE" 2>/dev/null || echo 0)"
+        case "$last" in ''|*[!0-9]*) last=0 ;; esac   # a shared /tmp path: never trust its contents
+        now="$(date +%s%N)"
         wait="$(awk -v n="$now" -v l="$last" -v m="$MIN_INTERVAL" 'BEGIN{w=(l+ m*1e9 - n)/1e9; if(w<0)w=0; printf "%.3f", w}')"
         if awk -v w="$wait" 'BEGIN{exit !(w>0.05)}'; then sleep "$wait"; fi
       fi
@@ -58,8 +74,8 @@ get() { # get <path-with-query>
       sleep "$MIN_INTERVAL"
     fi
     code="$(curl -sS -m 20 -H "User-Agent: $UA" -H 'Accept: application/json' \
-            -o /tmp/.mb-body -w '%{http_code}' "$url")"
-    body="$(cat /tmp/.mb-body)"
+            -o "$BODY" -w '%{http_code}' "$url")"
+    body="$(cat "$BODY")"
     case "$code" in
       200) printf '%s' "$body" > "$CACHE/$key.json"; printf '%s' "$body"; return 0 ;;
       503) if [ "$tries" -ge 3 ]; then echo "mb-lookup: 503 from MusicBrainz after $tries attempts; it is throttling. Stop and wait." >&2; return 1; fi

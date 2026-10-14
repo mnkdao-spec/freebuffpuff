@@ -192,6 +192,12 @@ fi
 SECRET_RE='\b(sk_live_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
 hits=$(grep -rInE "$SECRET_RE" "$PACK" --exclude-dir=tests --exclude-dir=.git 2>/dev/null | grep -v '^Binary' || true)
 if [ -n "$hits" ]; then bad "credential-shaped string found outside tests/:"; printf '%s\n' "$hits" | head -3; else ok "no credential-shaped strings ship (outside the deliberate test fixture)"; fi
+# A fixed path under /tmp is shared, predictable and usually world-writable: any local user can
+# pre-create it, and `curl -o` (or a shell redirect) then truncates whatever a symlink points at.
+# Scratch space must come from mktemp or a per-user directory. Both slskd-doctor.sh and mb-lookup.sh
+# shipped this defect, which is why the guard is mechanical rather than a note in a review.
+FIXED_TMP=$(grep -rn --include='*.sh' -e '-o /tmp/' -e '> /tmp/' "$PACK/skills" "$PACK/mcp" "$PACK/install.sh" 2>/dev/null || true)
+if [ -z "$FIXED_TMP" ]; then ok "no shipped script writes to a fixed path under /tmp"; else bad "fixed /tmp write path (use mktemp):"; printf '%s\n' "$FIXED_TMP"; fi
 # knowledge.md ships <PLACEHOLDER>s the user must fill. The global template deliberately has none:
 # it is cross-project preferences, not paths. So assert it is real but contains no machine-specific
 # values instead of demanding placeholders it should not have.
@@ -312,7 +318,12 @@ GETS=$(grep -c "method: 'GET'" "$SRV")
 FETCHES=$(grep -c 'await fetch(' "$SRV")
 if [ "$GETS" -ge 1 ] && [ "$GETS" = "$FETCHES" ]; then ok "every fetch() call site ($FETCHES) is hardcoded method: 'GET'"; else bad "$FETCHES fetch() call site(s) but only $GETS GET-typed"; fi
 grep -qE "method: *['\"](POST|PUT|PATCH|DELETE)" "$SRV" && bad "server.js builds a mutating request" || ok "no mutating request is built anywhere in server.js"
-grep -qE 'allow|ALLOW|host' "$SRV" && ok "the server has a host allowlist" || bad "no host allowlist found in server.js"
+# Not "the word 'host' appears somewhere in the file" (the old check: it passed on a comment).
+# The allowlist has to be what the request is built from, or it is decoration. The behavioural
+# proof - a refused host, a capped body, a rejected enum - is in tests/run.sh against a local fixture.
+if grep -q 'assertAllowed(urlStr)' "$SRV" && sed -n '/^async function httpGet/,/^}/p' "$SRV" | grep -q 'assertAllowed('; then
+  ok "httpGet() routes every request through assertAllowed()"
+else bad "httpGet() does not gate its request through the host allowlist"; fi
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

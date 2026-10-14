@@ -394,6 +394,28 @@ wantnot "no backup warning on a clean config" "$OUT/lxc-good.txt" 'NO backup=1'
 PYTHON=python3 bash "$LXC_S" --config "$FIX/lxc/good.conf" --json > "$OUT/lxc.json" 2>/dev/null
 isjson "JSON mode emits one standalone JSON object" "$OUT/lxc.json"
 bash "$LXC_S" >/dev/null 2>&1; exitcode "exits 2 with no argument" 2 "$?"
+# `pct config <vmid>` has to go through a temp file on the host. TMPDIR is redirected into the
+# scratch dir so this asserts only about OUR file: it must not survive the run (it used to leak one
+# per invocation, root-owned, into /tmp).
+PCT_BIN="$WORK/pctbin"; PCT_TMP="$WORK/pcttmp"
+rm -rf "$PCT_BIN" "$PCT_TMP"; mkdir -p "$PCT_BIN" "$PCT_TMP"
+# Deliberately no `hostname:` key, so the report has to name the container by ID. Falling back to
+# the config filename would print the random mktemp name when the config came from `pct config`.
+cat > "$FIX/lxc/nohost.conf" <<'EOF'
+arch: amd64
+cores: 2
+mp0: /srv/media,mp=/data/media
+rootfs: local:120/vm-120-disk-0.raw,size=8G
+unprivileged: 1
+EOF
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$FIX/lxc/nohost.conf" > "$PCT_BIN/pct"; chmod +x "$PCT_BIN/pct"
+TMPDIR="$PCT_TMP" PATH="$PCT_BIN:$PATH" PYTHON=python3 bash "$LXC_S" 120 > "$OUT/lxc-pct.txt" 2>&1; ec=$?
+exitcode "audits a container through pct config" 0 "$ec"
+want "  ...and reports the findings from it" "$OUT/lxc-pct.txt" 'mp0'
+want "  ...naming it by id when the config has no hostname" "$OUT/lxc-pct.txt" 'hostname ct120'
+wantnot "  ...so no mktemp name reaches the report" "$OUT/lxc-pct.txt" 'hostname tmp'
+left=$(find "$PCT_TMP" -type f 2>/dev/null | wc -l | tr -d ' ')
+if [ "$left" = 0 ]; then ok "no temp file left behind after using pct"; else bad "$left temp file(s) leaked into TMPDIR"; find "$PCT_TMP" -type f | head -3; fi
 
 # =================================================== 3. compose-doctor.sh
 head_ "compose-doctor.sh  (music-path-and-hardlink-doctor, installed)"
@@ -595,6 +617,58 @@ if grep -q '"tools"' "$OUT/mcp.txt"; then
 else
   bad "MCP server did not answer tools/list"
 fi
+
+# The bridge's own safety behaviour, against a local fixture: the allowlist refusal, the response
+# cap, the enum check and the Lucene escaping are all unreachable from a real homelab (the pack
+# derives the allowlist from the very URLs it calls), so a fixture is how they get tested at all.
+mcp_call() { # mcp_call <outfile> <json-rpc line> [VAR=value ...]
+  local out="$1" line="$2"; shift 2
+  env "$@" node "$PACK/mcp/local-readonly/server.js" > "$out" 2>&1 <<EOF &
+$line
+EOF
+  local p=$!; sleep 1.5; kill $p 2>/dev/null; wait $p 2>/dev/null
+}
+FX_PORT="$WORK/mcp-port"; FX_BYTES="$WORK/mcp-bytes"; FX_LOG="$WORK/mcp-requests.log"
+rm -f "$FX_PORT" "$FX_BYTES"
+node "$PACK/tests/mcp-fixture.js" "$FX_PORT" "$FX_BYTES" "$FX_LOG" & FX_PID=$!
+for _ in $(seq 1 40); do [ -s "$FX_PORT" ] && break; sleep 0.1; done
+FXPORT="$(cat "$FX_PORT" 2>/dev/null || echo)"
+PING='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"navidrome_ping","arguments":{}}}'
+if [ -n "$FXPORT" ]; then
+  ok "local fixture listening on 127.0.0.1:$FXPORT"
+  # (a) the read cap, and that the body is abandoned rather than drained
+  mcp_call "$OUT/mcp-big.txt" "$PING" "ND_URL=http://127.0.0.1:$FXPORT/big"
+  want "a 20 MiB body is truncated at the cap" "$OUT/mcp-big.txt" 'truncated at 6000 bytes'
+  written="$(cat "$FX_BYTES" 2>/dev/null || echo 0)"
+  case "$written" in ''|*[!0-9]*) written=0 ;; esac
+  if [ "$written" -lt 4194304 ]; then
+    ok "the upstream socket was closed early ($written of 20971520 bytes reached the wire)"
+  else bad "the client read the whole body ($written bytes written before close)"; fi
+  # (b) a non-2xx upstream is a failed call, not a successful one with odd content
+  mcp_call "$OUT/mcp-500.txt" "$PING" "ND_URL=http://127.0.0.1:$FXPORT/err500"
+  want "an upstream 500 comes back as isError" "$OUT/mcp-500.txt" '"isError":true'
+  want "  ...naming the status and the host"   "$OUT/mcp-500.txt" 'HTTP 500'
+  # (c) a host outside the allowlist is refused before any request is made
+  FX_BEFORE=$(wc -l < "$FX_LOG" | tr -d ' ')
+  mcp_call "$OUT/mcp-refuse.txt" "$PING" "MCP_ALLOWED_HOSTS=example.invalid" "ND_URL=http://127.0.0.1:$FXPORT"
+  want "a host outside the allowlist is refused" "$OUT/mcp-refuse.txt" 'refusing 127\.0\.0\.1'
+  want "  ...as a failed call, not a result"     "$OUT/mcp-refuse.txt" '"isError":true'
+  [ "$(wc -l < "$FX_LOG" | tr -d ' ')" = "$FX_BEFORE" ] && ok "  ...and no socket was opened (0 requests reached the fixture)" \
+    || bad "the refused call still reached the upstream"
+  # (d) an argument that violates its declared enum never leaves the process
+  FX_BEFORE=$(wc -l < "$FX_LOG" | tr -d ' ')
+  mcp_call "$OUT/mcp-enum.txt" '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"musicbrainz_lookup","arguments":{"kind":"NOT-A-KIND","mbid":"x"}}}' "MB_URL=http://127.0.0.1:$FXPORT"
+  want "an out-of-enum kind is rejected"        "$OUT/mcp-enum.txt" 'kind must be one of'
+  [ "$(wc -l < "$FX_LOG" | tr -d ' ')" = "$FX_BEFORE" ] && ok "  ...locally, so no request was made" \
+    || bad "an invalid enum reached the upstream anyway"
+  # (e) a quote in a search term is escaped, not passed through as a Lucene operator
+  mcp_call "$OUT/mcp-lucene.txt" '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"musicbrainz_search_release_group","arguments":{"artist":"Radio\"head"}}}' "MB_URL=http://127.0.0.1:$FXPORT"
+  want    "a quote in the artist is escaped"     "$OUT/mcp-lucene.txt" 'artist%3A%22Radio%5C%22head%22'
+  wantnot "  ...not passed through unescaped"    "$OUT/mcp-lucene.txt" 'artist%3A%22Radio%22head'
+else
+  bad "the mcp fixture did not start (no port on stdout)"
+fi
+kill $FX_PID 2>/dev/null; wait $FX_PID 2>/dev/null
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

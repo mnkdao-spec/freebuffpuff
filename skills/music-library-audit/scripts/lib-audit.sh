@@ -15,7 +15,7 @@ if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "lib-audit: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "lib-audit: needs python3 (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 DIR="${1:-}"; [ -n "$DIR" ] && [ -d "$DIR" ] || { echo "usage: lib-audit.sh <music-dir> [--max N] [--hash] [--out FILE]" >&2; exit 2; }
 shift || true
 MAX=2000; HASH=0; OUT=""

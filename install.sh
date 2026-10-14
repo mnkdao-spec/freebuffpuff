@@ -6,7 +6,7 @@ set -euo pipefail
 
 PACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SRC="$PACK_DIR/skills"
-SCOPE=""; PROJECT_DIR=""; DO_GLOBAL=0; DO_PROJECT=0
+PROJECT_DIR=""; DO_GLOBAL=0; DO_PROJECT=0
 MCP_NAME=""; FORCE=0; DRY=0; VERIFY_ONLY=0
 NAME_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
 
@@ -35,7 +35,6 @@ check_line_endings() {
     die "refusing to install scripts that cannot execute"
   fi
 }
-say() { printf '%s\n' "$*"; }
 act() { if [ "$DRY" = 1 ]; then say "  [dry-run] $*"; else say "  $*"; fi; }
 
 usage() {
@@ -177,7 +176,7 @@ install_agents() {
 }
 
 install_support() {
-  local ops_dir="$1" prompts_dir="$2" f d
+  local ops_dir="$1" prompts_dir="$2" f
   act "support files -> $ops_dir and $prompts_dir"
   [ "$DRY" = 1 ] && return 0
   mkdir -p "$ops_dir/runbooks" "$prompts_dir"

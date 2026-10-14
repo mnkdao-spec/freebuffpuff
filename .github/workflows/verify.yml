@@ -1,0 +1,59 @@
+name: verify
+
+# The pack promises that every shipped script is verified and every documented claim is tested.
+# tests/run.sh and tests/invariants.sh are that verification; this workflow is the part a
+# contributor cannot forget to run, plus the ShellCheck gate pinned at zero (see .shellcheckrc).
+#
+# The suites need bash, python3, curl, git and node. They use the network only for the
+# MusicBrainz section, which skips itself with a warning when musicbrainz.org is unreachable.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'   # the MCP server uses global fetch, AbortSignal.timeout and web streams
+
+      - name: Syntax - every shell script, plus the two Node files
+        run: |
+          set -euo pipefail
+          mapfile -t sh < <(git ls-files '*.sh')
+          [ "${#sh[@]}" -gt 0 ] || { echo 'no shell files: is this a git checkout?' >&2; exit 1; }
+          for f in "${sh[@]}"; do bash -n "$f"; done
+          node --check mcp/local-readonly/server.js
+          node --check tests/mcp-fixture.js
+          echo "syntax OK: ${#sh[@]} shell scripts, 2 node files"
+
+      - name: ShellCheck
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          shellcheck --version
+          mapfile -t sh < <(git ls-files '*.sh')
+          # No arguments would make ShellCheck read stdin and hang; fail loudly instead.
+          [ "${#sh[@]}" -gt 0 ] || { echo 'no shell files: is this a git checkout?' >&2; exit 1; }
+          shellcheck -x "${sh[@]}"
+
+      - name: Behaviour suite  (tests/run.sh)
+        run: bash tests/run.sh
+
+      - name: Invariant suite  (tests/invariants.sh)
+        run: bash tests/invariants.sh

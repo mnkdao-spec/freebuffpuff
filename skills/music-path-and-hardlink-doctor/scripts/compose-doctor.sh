@@ -13,7 +13,7 @@ if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "compose-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "compose-doctor: needs python3 (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 # Flags in any order, like the other scripts in this pack (compose-doctor.sh --json FILE works).
 FILE=""; MODE=""
 for a in "$@"; do

@@ -10,7 +10,7 @@ if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "nsp-lint: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "nsp-lint: needs python3 (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 [ $# -ge 1 ] || { echo "usage: nsp-lint.sh <file.nsp> [...]" >&2; exit 2; }
 # A flag-looking argument is a usage error. Without this, `--json` was treated as a filename and
 # reported as "INVALID JSON: No such file" with exit 1 - the wrong diagnosis for a bad flag.

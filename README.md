@@ -14,8 +14,8 @@ prompts · 4 ops files + 4 runbooks.** Everything read-only by default.
 ./install.sh --both                 # both
 ./install.sh --verify               # validate all 39 skills and 5 agents, change nothing
 ./install.sh --project . --mcp local-readonly    # adds ./.agents/mcp.json (opt-in, GET-only)
-bash tests/run.sh                   # re-verify every script yourself (83 checks)
-bash tests/invariants.sh            # check the pack's own claims (54 checks)
+bash tests/run.sh                   # re-verify every script yourself (100 checks)
+bash tests/invariants.sh            # check the pack's own claims (55 checks)
 ```
 
 ## What's inside
@@ -47,6 +47,9 @@ tests/                run.sh: the verification harness. Builds fixtures, install
                       invariants.sh: checks the claims this README makes - read-only,
                           agent allowlists, frontmatter contract, installer idempotency,
                           Windows failure modes, no shipped credentials
+                      mcp-fixture.js: a throwaway HTTP server that tests the MCP bridge's own
+                          refusals (host allowlist, response cap, enum, Lucene escaping)
+.github/workflows/    verify.yml: bash -n + ShellCheck (pinned at zero) + both test suites
 prompts/              01-interview · 02-plan · 03-implement · 04-verify · 05-handoff
                       · 06-infra-change · 07-release-day
 ops/                  taskboard · progress · decisions · homelab-inventory
@@ -110,7 +113,13 @@ tracks, gigs and posts), self-hosted behind Caddy on the same box, with:
 - The Proxmox scripts are read-only by construction (no `qm`/`pct set`, no storage or firewall
   changes) and say what they could not read instead of guessing.
 - The MCP server is **GET-only by construction**: host-allowlisted, every `fetch()` call site
-  hardcoded to `GET`, and no write tool exposed. Verified by `tests/invariants.sh`.
+  hardcoded to `GET`, and no write tool exposed. `tests/invariants.sh` proves each request is built
+  *through* the allowlist (not merely that the file contains the word "host"). `tests/run.sh` drives
+  the bridge against a local fixture to prove the behaviour a real homelab can never reach: a host
+  outside the allowlist is refused before a socket is opened, a 20 MiB response is cut at the cap
+  with the connection closed early (measured: 0.6 MB of 21 MB reached the wire), a non-2xx upstream
+  is reported as `isError` rather than as a result with odd content, and an out-of-`enum` argument
+  never leaves the process.
 - The five agents have **no file-writing tool in their allowlists** (`write_file`, `str_replace`,
   `run_file_change_hooks` are absent from all five) - that is checked mechanically. They *do*
   have `run_terminal_command`, because their job is to run the read-only audit scripts; for that
@@ -168,7 +177,16 @@ output, and `ops/` makes a session ending cheap to recover from. Details and a m
 Two suites, both exit non-zero on any failure. They were written to catch the author, not to
 flatter the pack - most of the defects listed in this file were found by one of them.
 
-**`bash tests/run.sh`** (83 checks) - behavioural. Builds fake PVE, compose, `.nsp`, music, site and
+Both run on every push and pull request (`.github/workflows/verify.yml`), alongside `bash -n` over
+every shell script and a ShellCheck gate pinned at zero errors and zero warnings. The note
+categories that gate tolerates are listed with their reasons in `.shellcheckrc`; reproduce the
+lint locally with the command CI uses, from the pack root:
+
+```bash
+shellcheck -x $(git ls-files '*.sh')
+```
+
+**`bash tests/run.sh`** (100 checks) - behavioural. Builds fake PVE, compose, `.nsp`, music, site and
 audio-toolchain fixtures under `/tmp/freebuff-pack-verify`, installs the pack into a scratch repo
 with `--force` (so it always tests *your current copy*, never a stale install), runs all 8 scripts
 **from `.agents/skills/*/scripts/`** the way an agent would, and asserts the findings - including
@@ -176,7 +194,10 @@ the negative cases (a clean config must produce no warning, no `ffprobe` must pr
 a cache hit must not be rate-limited). The MusicBrainz section needs network and skips loudly
 without it.
 
-**`bash tests/invariants.sh`** (54 checks) - the claims *this README* makes, checked mechanically:
+Its MCP section starts a local HTTP fixture (`tests/mcp-fixture.js`) so the bridge's refusals -
+allowlist, response cap, `enum`, non-2xx - are asserted with no real service and no network.
+
+**`bash tests/invariants.sh`** (55 checks) - the claims *this README* makes, checked mechanically:
 
 | Claim | How it is tested |
 |---|---|
@@ -188,7 +209,9 @@ without it.
 | the installer is safe | `--dry-run` writes nothing; an existing `knowledge.md`/`.codebuffignore` is never overwritten; `--global` stays out of the cwd |
 | Windows failure modes | a CRLF script makes the install abort; a BOM+CRLF skill still validates; a pack path with spaces and `&` still yields valid `mcp.json` with no raw backslashes |
 | the MCP server is GET-only | every `fetch()` call site is hardcoded `method: 'GET'`; an unknown tool name returns a JSON-RPC error, not a result |
+| the host allowlist actually gates the request | `httpGet()` has to call `assertAllowed()`; a grep for the word "host" is not accepted as proof any more - the behavioural refusal (no socket opened) is asserted in `run.sh` |
 | no credentials ship | scans for key-shaped strings (`tests/` excluded - it plants one on purpose) |
+| no script trusts a shared `/tmp` path | greps the shipped scripts for a fixed `-o /tmp/` or `> /tmp/` target; scratch space has to come from `mktemp` or a per-user directory (a predictable path in `/tmp` can be pre-created as a symlink and overwritten) |
 
 ## Honest limitations
 
