@@ -18,7 +18,7 @@ What was verified in sandbox:
 - tests/invariants.sh: 54/54 passed  
 - install.sh --verify: 39 skills, 5 agents valid
 - All scripts are read-only by construction
-- Agent tool allowlists corrected to documented wocabulary
+- Agent tool allowlists corrected to documented vocabulary
 - PKM/music/web/Proxmox docs fact-checked against current sources
 
 What could NOT be verified in sandbox (needs local machine):
