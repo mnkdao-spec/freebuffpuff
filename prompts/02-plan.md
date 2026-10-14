@@ -19,4 +19,3 @@ Plan format:
 
 Then stop and wait for my approval. If any step would write to a music library, a notes vault,
 a database, or a running service's state, say so explicitly in RISKS and mark it APPROVAL-REQUIRED.
-```
