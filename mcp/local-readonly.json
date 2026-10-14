@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "localReadonly": {
+      "command": "node",
+      "args": ["__PACK_DIR__/mcp/local-readonly/server.js"],
+      "env": {
+        "ND_USER": "$ND_USER",
+        "ND_TOKEN": "$ND_TOKEN",
+        "ND_SALT": "$ND_SALT",
+        "LIDARR_API_KEY": "$LIDARR_API_KEY",
+        "SLSKD_API_KEY": "$SLSKD_API_KEY",
+        "MB_USER_AGENT": "$MB_USER_AGENT"
+      }
+    }
+  }
+}
