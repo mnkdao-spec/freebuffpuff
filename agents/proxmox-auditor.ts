@@ -15,15 +15,7 @@ const definition: AgentDefinition = {
   // No `model` on purpose: inherit the session's model so this stays usable on the free tier.
   includeMessageHistory: false,
   outputMode: 'last_message',
-  toolNames: [
-    'read_files',
-    'read_subtree',
-    'glob',
-    'list_directory',
-    'code_search',
-    'run_terminal_command',
-    'end_turn',
-  ],
+  toolNames: ['read_files', 'code_search', 'find_files', 'run_terminal_command', 'think_deeply', 'end_turn'],
   spawnerPrompt:
     'Spawn this to audit a Proxmox host or guest read-only: inventory, mount/backup gaps, privilege and device findings, repository hygiene, upgrade risk. It never edits the hypervisor or a guest - it reports and proposes.',
   inputSchema: {

@@ -31,24 +31,32 @@ files** and cannot corrupt tags. It is still a file write, so preview it.
   "comment": "why this exists, for your future self",
   "all": [
     { "is":   { "genre": "Ambient" } },
-    { "is":   { "playCount": 0 } }
-  ],
-  "any": [
-    { "gt": { "rating": 3 } },
-    { "inTheLast": { "addedAt": "90d" } }
+    { "is":   { "playCount": 0 } },
+    { "any": [
+      { "gt": { "rating": 3 } },
+      { "inTheLast": { "addedAt": "90d" } }
+    ] }
   ],
   "sort": "-rating,title",
   "limit": 100,
   "refreshDelay": "1d"
 }
 ```
-- `all` = AND, `any` = OR; rule groups nest by repeating the operator.
-- Operators seen in the docs: `is`, `contains`, `gt`, `inTheRange`, `inTheLast`, `isMissing`, plus
-  playlist references. Lint warns on anything unrecognised rather than guessing.
-- `sort` accepts multiple fields with a `-` prefix per field for descending.
+- `all` = AND, `any` = OR. **A single level may not mix them** - Navidrome rejects a file with
+  both `all` and `any` at the same level, so put the OR branch inside the AND branch as above.
+  The linter fails a file that mixes them rather than letting you find out at scan time.
+- **The documented operator set** (Navidrome 0.64.x): `is`, `isNot`, `gt`, `lt`, `contains`,
+  `notContains`, `startsWith`, `endsWith`, `inTheRange` (inclusive), `before`, `after`,
+  `inTheLast`, `notInTheLast`, `inPlaylist`, `notInPlaylist`, `isMissing`, `isPresent`.
+  `gte`, `lte` and `in` are **not** documented - use `inTheRange`, `gt`/`lt`, or `is`/`isNot`.
+  The linter warns on the undocumented ones and fails on invented ones.
+- Documented top-level keys: `name`, `comment`, `public`, `all`, `any`, `sort`, `order`, `limit`,
+  `limitPercent`, `refreshDelay`. There is no `owner` key - ownership is changed in the Playlists
+  view, not in the file.
+- `sort` accepts multiple fields with a `-` prefix per field for descending; `random` is special.
 - `limit` or `limitPercent` bound the result. `refreshDelay` stabilises randomised lists so
   offline-caching clients do not thrash.
-- `library_id` scopes a rule to one of several libraries.
+- `library_id` scopes a rule to one of several libraries (multi-library since Navidrome 0.58).
 
 ## Procedure
 1. Translate the request into a testable sentence ("tracks in genre Ambient, never played,

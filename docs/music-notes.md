@@ -3,6 +3,17 @@
 The facts the skills rely on, so you can check them rather than trust them. Version-sensitive: verify
 against the docs for the release you actually run.
 
+## Version checkpoints (last verified October 2026)
+Cheap way to spot stale advice before it costs you a weekend. Re-check each line against the
+project's release page before you rely on it.
+
+| Component | As verified | What it changes |
+|---|---|---|
+| **Navidrome** | **0.64.x** (actively released) | **0.63.2+ rejects a `.nsp` that mixes top-level `all` and `any`.** **0.64.0** disabled Extism's built-in HTTP for plugins (host service only) and tightened plugin access to private/loopback/link-local addresses, so a hostname in the manifest no longer authorizes a LAN service. **0.64.0** also re-encoded internal IDs - back up the DB before upgrading, and expect clients caching IDs to resync. Multi-library arrived in **0.58.0**. The package format is **`.ndp`** (a zip with `manifest.json`). |
+| **Lidarr** | **3.x** (3.1.x stable; `develop`/`nightly` ahead) | v3 is the plugin era (plugins need `develop`/`nightly`, not master), and the runtime moved to .NET 8 with Linux x86 dropped. The **metadata server has had a real reliability problem during 2026** - text search was reported functionally broken while ID-based search worked better. Prefer release-group MBID lookups; expect text search to be the flaky path. |
+| **slskd** | 0.2x | The API is versioned `v0` and the maintainer warns breaking changes are possible, so **verify the routes against your own `/swagger`** rather than trusting a path in a script. `slskd-doctor.sh` treats a 404 per probe as "not in this version" for exactly this reason. |
+| **Proxmox VE** | 9.2 (8.4 support ended Aug 2026) | See `proxmox-notes.md`. |
+
 ## Lidarr
 - Tracks **release groups** (an album as a work); a MusicBrainz **release** is one edition. Adding an
   album by *release* MBID instead of *release-group* MBID is the most common documented mistake.

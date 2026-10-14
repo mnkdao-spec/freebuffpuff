@@ -14,7 +14,8 @@ prompts · 4 ops files + 4 runbooks.** Everything read-only by default.
 ./install.sh --both                 # both
 ./install.sh --verify               # validate all 39 skills and 5 agents, change nothing
 ./install.sh --project . --mcp local-readonly    # adds ./.agents/mcp.json (opt-in, GET-only)
-bash tests/run.sh                   # re-verify every script yourself (77 checks)
+bash tests/run.sh                   # re-verify every script yourself (83 checks)
+bash tests/invariants.sh            # check the pack's own claims (54 checks)
 ```
 
 ## What's inside
@@ -43,6 +44,9 @@ agents/               5 read-only TS agents: Repo Cartographer, Verifier, Librar
                           (+ .agents/types/), which IS trust-gated - expect one prompt
 tests/                run.sh: the verification harness. Builds fixtures, installs into a
                           scratch repo, runs every script and asserts the findings
+                      invariants.sh: checks the claims this README makes - read-only,
+                          agent allowlists, frontmatter contract, installer idempotency,
+                          Windows failure modes, no shipped credentials
 prompts/              01-interview · 02-plan · 03-implement · 04-verify · 05-handoff
                       · 06-infra-change · 07-release-day
 ops/                  taskboard · progress · decisions · homelab-inventory
@@ -67,8 +71,9 @@ surprise people:
   `lxc-pve`, not by disabling AppArmor.
 - **Hardlinks** need one filesystem: two ZFS datasets in one pool are two filesystems.
 - **Never expose 8006**; the *arr UIs and the library stay on the LAN/tailnet.
-- **Upgrades**: 8 → 9 is a Debian release change (`pve8to9 --full`, >10 GB free, no mixed suites),
-  and there is no supported downgrade.
+- **Upgrades**: 8 → 9 is a Debian release change (`pve8to9 --full`, at least ~5 GB free on `/` and
+  ideally >10 GB, no mixed suites), and there is no supported downgrade. PVE 8.4's support window
+  ended in **August 2026**, so if you are still on 8.x the upgrade is the maintenance task.
 
 ### Website (`skills/web/`)
 A **static-first** site for the project (Astro-shaped by default: content collections for releases,
@@ -104,8 +109,13 @@ tracks, gigs and posts), self-hosted behind Caddy on the same box, with:
   APPROVAL-REQUIRED, not silently skipped.
 - The Proxmox scripts are read-only by construction (no `qm`/`pct set`, no storage or firewall
   changes) and say what they could not read instead of guessing.
-- The MCP server and all five agents are **read-only by construction** - GET-only/host-allowlisted,
-  and a tool allowlist with no write tools.
+- The MCP server is **GET-only by construction**: host-allowlisted, every `fetch()` call site
+  hardcoded to `GET`, and no write tool exposed. Verified by `tests/invariants.sh`.
+- The five agents have **no file-writing tool in their allowlists** (`write_file`, `str_replace`,
+  `run_file_change_hooks` are absent from all five) - that is checked mechanically. They *do*
+  have `run_terminal_command`, because their job is to run the read-only audit scripts; for that
+  one tool the guarantee is the system prompt, not the allowlist. Delete that name from
+  `toolNames` if you want zero write capability. See `agents/README.md`.
 - Known-bad commands (`docker compose down -v`, `docker volume prune`, `chown -R`,
   `duplicates --delete`, nightly branch switches, bulk renames, `rm` on data) are forbidden in
   every skill.
@@ -155,13 +165,30 @@ output, and `ops/` makes a session ending cheap to recover from. Details and a m
 
 ## Re-verifying it yourself
 
-`bash tests/run.sh` is the harness these tables were produced with. It builds fake PVE, compose,
-`.nsp`, music, site and audio-toolchain fixtures under `/tmp/freebuff-pack-verify`, installs the pack
-into a scratch repo with `--force` (so it always tests *your current copy*, never a stale install),
-runs all 8 scripts **from `.agents/skills/*/scripts/`** the way an agent would, and asserts the
-findings - including the negative cases (a clean config must produce no warning, no `ffprobe` must
-produce no traceback). It exits non-zero if anything fails, and turns a genuinely useful script into
-a falsifiable one. The MusicBrainz section needs network; it skips loudly when unreachable.
+Two suites, both exit non-zero on any failure. They were written to catch the author, not to
+flatter the pack - most of the defects listed in this file were found by one of them.
+
+**`bash tests/run.sh`** (83 checks) - behavioural. Builds fake PVE, compose, `.nsp`, music, site and
+audio-toolchain fixtures under `/tmp/freebuff-pack-verify`, installs the pack into a scratch repo
+with `--force` (so it always tests *your current copy*, never a stale install), runs all 8 scripts
+**from `.agents/skills/*/scripts/`** the way an agent would, and asserts the findings - including
+the negative cases (a clean config must produce no warning, no `ffprobe` must produce no traceback,
+a cache hit must not be rate-limited). The MusicBrainz section needs network and skips loudly
+without it.
+
+**`bash tests/invariants.sh`** (54 checks) - the claims *this README* makes, checked mechanically:
+
+| Claim | How it is tested |
+|---|---|
+| "39 skills · 8 scripts · 5 agents · 7 prompts" | counts parsed out of this file and compared with the tree |
+| every skill satisfies the documented frontmatter contract | name matches directory, charset, ≤64 chars, description 1-1024, **unique** names and descriptions, `metadata.category` matches the prefix |
+| "read-only" | every input file is hashed before and after all 8 scripts run; the suite fails if a single byte changes |
+| the agents are read-only | each definition is executed and its `toolNames` checked against the **documented** tool vocabulary; any `write_file`/`str_replace`/`run_file_change_hooks` fails the suite |
+| known-bad commands are forbidden | every mention of `docker compose down -v`, `docker volume prune`, `chown -R`, `duplicates --delete` must sit in a prohibitive sentence |
+| the installer is safe | `--dry-run` writes nothing; an existing `knowledge.md`/`.codebuffignore` is never overwritten; `--global` stays out of the cwd |
+| Windows failure modes | a CRLF script makes the install abort; a BOM+CRLF skill still validates; a pack path with spaces and `&` still yields valid `mcp.json` with no raw backslashes |
+| the MCP server is GET-only | every `fetch()` call site is hardcoded `method: 'GET'`; an unknown tool name returns a JSON-RPC error, not a result |
+| no credentials ship | scans for key-shaped strings (`tests/` excluded - it plants one on purpose) |
 
 ## Honest limitations
 
@@ -177,12 +204,23 @@ a falsifiable one. The MusicBrainz section needs network; it skips loudly when u
 4. **Model-facing behaviour is unverified.** Whether a model *auto-selects* a skill by description
    cannot be tested without a signed-in turn. `probe/USER-CHECKLIST.md` settles it in 10 minutes.
 5. **Desktop parity is unverified** - the same `.agents/` tree is likely shared, but that is a guess.
-6. **Time-sensitive content.** Model names, prices, framework majors, CDN limits and Proxmox versions
-   change. The pack states *how* to check rather than pinning a catalogue.
-7. **`lib-audit.sh` reports only what your box can measure.** Codec/duration/bitrate checks need
+6. **Time-sensitive content, re-checked against the current docs (October 2026) but still
+   time-sensitive.** `docs/music-notes.md` opens with a version-checkpoint table (Navidrome 0.64.x,
+   Lidarr 3.x, slskd's `v0` API, PVE 9.2) naming the specific behaviour that changed. Confirmed
+   against current docs: PVE 9.x with 8.4 already past EOL, ARC capped at 10%/16 GiB since 8.1,
+   `PVEAuditor` + privilege separation, Navidrome's `.nsp` operator set and the all/any rule, the
+   `.ndp` plugin package, Lidarr's 80%/60% as **album match and worst-matching track** (not a
+   percentage of tracks), "Use Hardlinks Instead of Copy" on by default, the CWV set as **LCP/INP/CLS**
+   (INP replaced FID), and the fact that Google lists **no** dedicated music rich result. Where a
+   fact could not be confirmed from an official page it is marked as unverified rather than stated.
+7. **The `model` field on the agents is a deliberate deviation.** Current Codebuff docs list it as
+   required; these definitions omit it so they inherit your session's model instead of pinning an
+   id that may not exist in your catalog. One line per file fixes it if your TUI rejects them -
+   `agents/README.md` and the checklist say exactly what to add.
+8. **`lib-audit.sh` reports only what your box can measure.** Codec/duration/bitrate checks need
    `ffprobe` (ffmpeg) and the FLAC integrity test needs `flac`; a minimal container may have neither.
    The script says which checks it skipped rather than reporting a library full of "duration 0".
-8. **Not medical, legal or financial advice**, and nothing here advises on the legality of any
+9. **Not medical, legal or financial advice**, and nothing here advises on the legality of any
    content.
 
 ## Adapting it

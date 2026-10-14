@@ -38,8 +38,12 @@ terms/pricing change without asking you.
 Ranked, safest first:
 1. **A separate preview store** on your own domain (small MP3s in an unguessable directory,
    noindex, not linked). Simplest, exposes nothing else, easy to delete after release day.
-2. **Navidrome's share feature** - a share is designed for exactly this: a link to selected tracks
-   or albums, rather than access to the library.
+2. **Navidrome's share feature** - a link to selected tracks or albums rather than access to the
+   library. Be precise about what it is: the current docs describe a share as an **unauthenticated
+   public link**, with no documented password or recipient check. So it is *unguessable*, not
+   *private* - the URL is the only secret. Send it individually, set an expiry, and expect that
+   anyone who has the URL can listen. If the preview genuinely needs authentication, use pattern 1
+   or 3 instead.
 3. A **dedicated, narrowly-scoped library user** behind a server-side proxy with an allowlist and
    rate limiting.
 

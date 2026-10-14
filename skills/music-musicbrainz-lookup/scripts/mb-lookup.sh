@@ -126,5 +126,7 @@ for r in d.get("recordings",[])[:8]:
     a=", ".join(x["artist"]["name"] for x in r.get("artist-credit",[]) if isinstance(x,dict) and "artist" in x)
     print("%-38s %-40s %s" % (r["id"], r["title"][:40], a[:30]))'
     ;;
-  *) sed -n '6,14p' "$0" | sed 's/^# \{0,1\}//' ;;
+  # An unknown command is a usage error, like every other script in this pack. Printing the
+  # usage and exiting 0 would make a typo look like success to whatever called it.
+  *) sed -n '6,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

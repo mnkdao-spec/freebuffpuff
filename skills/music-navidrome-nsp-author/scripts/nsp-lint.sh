@@ -12,15 +12,32 @@ if [ -z "${PY:-}" ]; then
 fi
 if [ -z "$PY" ]; then echo "nsp-lint: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 [ $# -ge 1 ] || { echo "usage: nsp-lint.sh <file.nsp> [...]" >&2; exit 2; }
+# A flag-looking argument is a usage error. Without this, `--json` was treated as a filename and
+# reported as "INVALID JSON: No such file" with exit 1 - the wrong diagnosis for a bad flag.
+for a in "$@"; do
+  case "$a" in
+    -*) echo "nsp-lint: unknown flag: $a" >&2; echo "usage: nsp-lint.sh <file.nsp> [...]" >&2; exit 2 ;;
+  esac
+done
 "$PY" - "$@" <<'PY'
 import json, sys, re
 
 # A rule node is { <operator>: { <field>: <value> }, ... "all"/"any": [ <rule nodes> ] }.
-OPS = {"is","isNot","contains","notContains","gt","lt","gte","lte","inTheRange","inTheLast",
-       "before","after","isMissing","isNotMissing","inPlaylist","notInPlaylist",
-       "startsWith","endsWith","isNot","notInTheRange"}
+#
+# OPS is the operator set DOCUMENTED by Navidrome (Smart Playlists docs, verified against
+# v0.64.x). Note what is deliberately NOT here: `gte`, `lte` and `in` are not documented -
+# use `inTheRange` (documented as inclusive), `gt`/`lt`, or `is`/`isNot`. They are listed in
+# PLAUSIBLE below so a file using them gets a warning that names the documented alternative,
+# rather than either a false pass or a hard rejection.
+OPS = {"is","isNot","gt","lt","contains","notContains","startsWith","endsWith",
+       "inTheRange","before","after","inTheLast","notInTheLast",
+       "inPlaylist","notInPlaylist","isMissing","isPresent"}
+PLAUSIBLE = {"gte", "lte", "in", "isNotMissing", "notInTheRange"}
 GROUPS = {"all","any"}
-TOP = {"name","all","any","sort","order","limit","limitPercent","refreshDelay","comment","owner","public"}
+# Documented top-level keys. `owner` is NOT one: ownership is changed in the Playlists view, not
+# set in the .nsp file, so it warns like any other unknown key.
+TOP = {"name","all","any","sort","order","limit","limitPercent","refreshDelay","comment","public"}
+DOCUMENTED_MSG = ", ".join(sorted(OPS))
 DUR = re.compile(r'^\s*\d+\s*(s|sec|m|min|h|d|w|mo|y)?\s*$')
 SORT_FIELD = re.compile(r'^-?[A-Za-z][A-Za-z0-9_.]*$')
 
@@ -31,16 +48,27 @@ def check_node(node, path, problems, warns):
     keys = list(node)
     if not keys:
         problems.append((path, "empty rule")); return
-    known = [k for k in keys if k in OPS or k in GROUPS]
+    # Navidrome >= 0.63.2 rejects a file that mixes top-level `any` and `all`. The docs are
+    # explicit that they cannot be combined at the same level, so this is a hard problem, not
+    # a style note - the playlist silently never loads.
+    both = [g for g in GROUPS if node.get(g)]
+    if len(both) == 2:
+        problems.append((path, "'all' and 'any' cannot be combined at the same level - Navidrome "
+                               "rejects a file that mixes them. Use nested rule groups instead."))
+    known = [k for k in keys if k in OPS or k in GROUPS or k in PLAUSIBLE]
     if not known:
-        problems.append((path, "no rule operator; keys=%s (expected one of all/any/%s)"
-                         % (keys, "/".join(sorted(OPS)[:6]) + "/..."))); return
+        problems.append((path, "no rule operator; keys=%s (documented operators: %s)"
+                         % (keys, DOCUMENTED_MSG))); return
     for k, v in node.items():
         if k in GROUPS:
             if not isinstance(v, list) or not v:
                 problems.append(("%s.%s" % (path, k), "must be a non-empty array of rules")); continue
             for i, child in enumerate(v):
                 check_node(child, "%s.%s[%d]" % (path, k, i), problems, warns)
+        elif k in PLAUSIBLE:
+            warns.append(("%s.%s" % (path, k), "%r is not in the operator list documented for "
+                          "Navidrome 0.64. It may be ignored or rejected by your version - prefer "
+                          "inTheRange/gt/lt/isPresent. Documented operators: %s" % (k, DOCUMENTED_MSG)))
         elif k in OPS:
             if not isinstance(v, dict) or not v:
                 problems.append(("%s.%s" % (path, k), "operator value must be a non-empty {field: value} object"))
@@ -70,6 +98,12 @@ for fn in sys.argv[1:]:
         problems.append(("name", "required: a non-empty string"))
     if not any(data.get(k) for k in GROUPS):
         problems.append(("all/any", "at least one rule group is required"))
+    # The top level is not passed through check_node (only its children are), so the
+    # same-level mixing rule has to be applied here too.
+    if data.get("all") and data.get("any"):
+        problems.append(("all/any", "'all' and 'any' cannot be combined at the same level - "
+                                     "Navidrome rejects a file that mixes them. Use nested rule "
+                                     "groups instead (put the 'any' branch inside 'all')."))
     for k, v in data.items():
         if k not in TOP:
             warns.append(("top-level", "unknown key %r (Navidrome may ignore it)" % k)); continue

@@ -12,15 +12,7 @@ const definition: AgentDefinition = {
   version: '1.0.0',
   includeMessageHistory: false,
   outputMode: 'last_message',
-  toolNames: [
-    'read_files',
-    'read_subtree',
-    'glob',
-    'list_directory',
-    'code_search',
-    'run_terminal_command',
-    'end_turn',
-  ],
+  toolNames: ['read_files', 'code_search', 'find_files', 'run_terminal_command', 'think_deeply', 'end_turn'],
   spawnerPrompt:
     'Spawn this to verify a website build before/after shipping a release page: run the build, audit the output, check structured data, links, weight and the live deployment. It reports; it does not edit source.',
   inputSchema: {
@@ -33,7 +25,7 @@ const definition: AgentDefinition = {
   systemPrompt: `You verify a website build. You report findings; you do not modify the site's source.
 
 Constraints:
-- Do NOT edit source files, content, or configuration. Never call write_file, str_replace or apply_patch. If a fix is needed, describe it precisely.
+- Do NOT edit source files, content, or configuration. Never call write_file, str_replace or run_file_change_hooks. If a fix is needed, describe it precisely.
 - You MAY run the project's own build/test/lint/audit commands and read-only HTTP requests. Builds write to the output directory - that is expected; editing the source is not.
 - Never publish, deploy, push, or change DNS/CDN configuration.
 - Never print secrets, tokens or .env contents. If you find one in the build output, report the PATH only - do not echo the value.

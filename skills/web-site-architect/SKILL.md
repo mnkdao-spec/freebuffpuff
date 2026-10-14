@@ -17,6 +17,11 @@ A release page is headings, artwork, text and links. It does not need a browser 
 - Version-sensitive: check the framework's own engine requirement before installing rather than
   trusting a blog post (e.g. Astro 6's announcement pairs it with Node 22+; Nuxt 4 and Next 16 are
   the recent majors). `npm view <pkg> engines version` answers it in one line - pin in the lockfile.
+- **The content-collections API moved.** Current Astro uses `src/content.config.ts` with
+  `defineCollection({ loader: glob({...}), schema })`; the older `src/content/config.ts` path is
+  legacy and Astro 6 removed the automatic compatibility shim. Most tutorials you will find are
+  written against the old path, so check the file name against the docs before copying an example.
+  [content collections](https://docs.astro.build/en/guides/content-collections/)
 
 ## Model the content, not the pages
 Releases, events and posts are data. Define them once with a schema and render pages from it:

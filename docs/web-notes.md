@@ -64,9 +64,12 @@ controls for anything meant to stay private. [Tunnel](https://developers.cloudfl
   research - check each provider's own docs before relying on one.)
 - **Owned smart links**: a `/listen/<slug>/` page beats a third-party link-in-bio - you keep the
   traffic, the analytics and the uptime.
-- **Private previews**: use Navidrome's **share** feature for selected tracks/albums, or a separate
-  preview-file store - never an admin credential or a token in browser code. Navidrome's Subsonic
-  API and library permissions are documented; treat any public use as a security decision.
+- **Pre-release previews**: Navidrome's **share** feature gives a link to selected tracks/albums,
+  but the current docs describe a share as an **unauthenticated public link** - there is no
+  documented password/recipient protection, so the URL *is* the secret. Treat "private" as
+  "unguessable", send it individually, and let it expire; for anything that must actually require
+  authentication, use a separate preview store or a scoped library user behind your own proxy.
+  Never an admin credential or a token in browser code.
   [Subsonic API](https://www.navidrome.org/docs/developers/subsonic-api/) · [sharing](https://www.navidrome.org/docs/usage/features/sharing/)
 - **Feeds**: ship RSS/Atom for releases and posts; podcast-style feeds only if you actually publish
   episodic audio (Apple Podcasts requires RSS 2.0 with enclosures, stable GUIDs and byte-range/HEAD

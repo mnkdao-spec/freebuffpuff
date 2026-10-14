@@ -211,17 +211,20 @@ services:
 EOF
 
 # ------------------------------------------------------------- .nsp fixtures
+# Valid as of Navidrome 0.64: a level may not mix `all` and `any`, so the OR branch is nested
+# inside the AND branch. (This fixture mixing them at the top level was a real defect until the
+# linter learned the rule - see tests/invariants.sh.)
 cat > "$FIX/nsp/good.nsp" <<'EOF'
 {
   "name": "Late night instrumental",
   "comment": "quiet listening, nothing played yet",
   "all": [
     { "is": { "genre": "Ambient" } },
-    { "is": { "playCount": 0 } }
-  ],
-  "any": [
-    { "gt": { "rating": 3 } },
-    { "inTheLast": { "addedAt": "90d" } }
+    { "is": { "playCount": 0 } },
+    { "any": [
+      { "gt": { "rating": 3 } },
+      { "inTheLast": { "addedAt": "90d" } }
+    ] }
   ],
   "sort": "-rating,title",
   "limit": 100,

@@ -13,7 +13,7 @@ const definition: AgentDefinition = {
   // No `model` field on purpose - inherits the session model, so it works on the free tier.
   includeMessageHistory: false,
   outputMode: 'last_message',
-  toolNames: ['read_files', 'read_subtree', 'code_search', 'glob', 'list_directory', 'read_url', 'end_turn'],
+  toolNames: ['read_files', 'code_search', 'find_files', 'run_terminal_command', 'think_deeply', 'end_turn'],
   spawnerPrompt:
     'Spawn FIRST, before planning or changing a self-hosted media stack or notes repo. Maps services, ports, mounts, config locations and where files flow. Read-only.',
   inputSchema: {
@@ -26,7 +26,7 @@ const definition: AgentDefinition = {
   systemPrompt: `You map a system. You do not change it.
 
 Absolute constraints:
-- Read-only. Never call write_file, str_replace or apply_patch. Never run a mutating command.
+- Read-only. Never call write_file, str_replace or run_file_change_hooks. Never run a mutating command.
 - Never open a file that holds credentials (.env, *.key, *.pem, config.xml, slskd.yml with tokens).
   Report its location and which variables it is expected to define - never its contents.
 - Distinguish what you OBSERVED (a file you read, a line you can cite) from what you INFER.
@@ -46,7 +46,7 @@ Produce, in this order:
 
 Keep it compact. A useful map fits on one screen and cites file paths.`,
   instructionsPrompt: `Start from the compose file or the entrypoint, then follow the references.
-Use grep/glob to find config files rather than guessing names. For every claim, name the file and
+Use code_search/find_files to find config files rather than guessing names. For every claim, name the file and
 the line that supports it. Do not summarise a file you did not open.`,
   stepPrompt: `Continue mapping read-only. Use end_turn when the map is complete.`,
 };

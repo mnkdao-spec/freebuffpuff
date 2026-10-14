@@ -52,6 +52,16 @@ curl -s -H "X-API-Key: $SLSKD_API_KEY"  http://localhost:5030/api/v0/server | he
       `Library Auditor`, `Proxmox Auditor` and `Site QA` should autocomplete. **This is the tier
       that was not verifiable in the sandbox.** If they do not appear, delete `.agents/*.ts`; you
       lose only this tier.
+- [ ] **If the agents are rejected or skipped, add the model.** Current Codebuff docs list `model`
+      as **required**; these five omit it deliberately so they inherit your session's model. Run
+      `/model` to see the exact id, then:
+      ```bash
+      MODEL='paste-the-id-from-/model'
+      sed -i "s/^\(\s*displayName:.*\)$/\1\n  model: '$MODEL',/" .agents/*.ts
+      bash install.sh --verify
+      ```
+      (Verified: the inserted field parses and each agent still loads. This is the single most
+      likely reason the tier appears not to work.)
 
 ## 6. Do the Proxmox scripts work on your host? (run on the PVE host, or over SSH)
 ```bash

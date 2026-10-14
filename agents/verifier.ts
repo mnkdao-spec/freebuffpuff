@@ -14,15 +14,7 @@ const definition: AgentDefinition = {
   // Freebuff's free tier without pinning an id that may not exist in your catalog.
   includeMessageHistory: false, // isolate it from the author's reasoning; give it the artefacts
   outputMode: 'last_message',
-  toolNames: [
-    'read_files',
-    'read_subtree',
-    'code_search',
-    'glob',
-    'list_directory',
-    'run_terminal_command',
-    'end_turn',
-  ],
+  toolNames: ['read_files', 'code_search', 'find_files', 'run_terminal_command', 'think_deeply', 'end_turn'],
   spawnerPrompt:
     'Spawn this AFTER a change is made and self-verified. It reviews read-only and reports problems it can support with evidence: missed requirements, regressions, security issues, unnecessary complexity. It never edits.',
   inputSchema: {
@@ -35,7 +27,7 @@ const definition: AgentDefinition = {
   systemPrompt: `You are a verifier. You are not the author's assistant and you do not help finish the work.
 
 Absolute constraints:
-- You must NOT edit any file. Never call write_file, str_replace or apply_patch. If you believe a fix is needed, describe it.
+- You must NOT edit any file. Never call write_file, str_replace or run_file_change_hooks. If you believe a fix is needed, describe it.
 - You must NOT run a command that mutates state. Read-only commands only (tests, linters, 'git diff', 'git status', 'cat', 'grep', 'docker compose config -q', '*_health' probes). No installs, no restarts, no migrations, no writes to data directories.
 - Never trust the author's summary. Read the actual diff and the actual files.
 

@@ -12,7 +12,7 @@ const definition: AgentDefinition = {
   version: '1.0.0',
   includeMessageHistory: false,
   outputMode: 'last_message',
-  toolNames: ['read_files', 'code_search', 'glob', 'list_directory', 'run_terminal_command', 'end_turn'],
+  toolNames: ['read_files', 'code_search', 'find_files', 'run_terminal_command', 'think_deeply', 'end_turn'],
   spawnerPrompt:
     'Spawn for a scheduled or on-demand read-only health check of a self-hosted music stack: compose/mount sanity, service health, tag consistency, duplicate candidates, integrity failures.',
   inputSchema: {
@@ -25,7 +25,7 @@ const definition: AgentDefinition = {
   systemPrompt: `You audit a self-hosted music stack and report. You never change anything.
 
 Hard constraints:
-- Read-only. No write_file / str_replace / apply_patch. No mutating shell commands.
+- Read-only. No write_file, str_replace or run_file_change_hooks. No mutating shell commands.
 - Forbidden: rm, mv, chmod, chown, docker compose up/down/restart, docker volume prune,
   any POST/PUT/DELETE HTTP call, any beets write (only --pretend / -p previews are allowed),
   any Navidrome rescan trigger, any Lidarr/Radarr/Prowlarr state change.
@@ -47,7 +47,8 @@ What to produce, in this order:
   instructionsPrompt: `Prefer the pack's scripts, which are read-only by design:
   bash .agents/skills/music-path-and-hardlink-doctor/scripts/compose-doctor.sh docker-compose.yml
   bash .agents/skills/music-library-audit/scripts/lib-audit.sh <library-dir> --out <scratch>/reports/
-  bash .agents/skills/slskd-ops/...  -> use mcp/local-readonly tools or curl GETs for service health
+  bash .agents/skills/music-library-audit/scripts/lib-audit.sh <library> --out <scratch>/reports/audit.json
+  # slskd/service health: use the mcp/local-readonly tools, or curl GETs with X-API-Key
 State every command you ran and its exit code. If a tool is missing, say so instead of guessing.
 Write the report to the scratch directory only if you were given one explicitly.`,
   stepPrompt: `Continue the read-only audit. Use end_turn when the report is complete.`,
