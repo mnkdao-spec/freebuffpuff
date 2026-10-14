@@ -35,7 +35,7 @@ files** and cannot corrupt tags. It is still a file write, so preview it.
     { "any": [
       { "gt": { "rating": 3 } },
       { "inTheLast": { "addedAt": "90d" } }
-    ]
+    ] }
   ],
   "sort": "-rating,title",
   "limit": 100,
