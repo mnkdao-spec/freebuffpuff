@@ -105,9 +105,9 @@ The pack includes 39 skills organized by domain. Each skill has a `SKILL.md` wit
 
 ### Proxmox (proxmox-*)
 
+- **proxmox-host-health**: Check host health, disk space, services
 - **proxmox-backup-and-restore**: Safe backup/restore procedures with vzdump
-- **proxmox-upgrade-safety**: Pre-checks and safe upgrade paths (PVE 8.x -> 9.x)
-- **proxmox-stack-map / guest-placement / storage-and-mounts / gpu-transcode / service-exposure**: Host auditing, placement, mounts, GPU, exposure
+- **proxmox-upgrade-safety**: Pre-checks and safe upgrade paths (PVE 8.x → 9.x)
 
 **Key Notes**: Targets PVE 9.2+, cgroup v1 removed in PVE 9. ARC defaults documented (10%/16 GiB since 8.1). Scripts validated with fixtures, not live hosts.
 
@@ -115,9 +115,9 @@ The pack includes 39 skills organized by domain. Each skill has a `SKILL.md` wit
 
 - **web-site-architect**: Design static sites with content collections
 - **web-release-page**: Create music release pages with structured data
-- **web-perf-a11y**: Built-site audit, Core Web Vitals (LCP, INP, CLS) guidance
+- **web-performance-audit**: Core Web Vitals (LCP, INP, CLS) guidance
 
-**Key Notes**: Uses Astro content collections (defineCollection pattern). CWV thresholds match current web.dev guidance.
+**Key Notes**: User Astro content collections (defineCollection pattern). CWV thresholds match current web.dev guidance.
 
 ### PKM (pkm-*)
 
@@ -289,7 +289,7 @@ When modifying:
 
 ## Handoff Guide for New Agents
 
-See the handoff prompt in [HANDOFF_PROMPT.md](HANDOFF_PROMPT.md) for instructions on running environment-specific tests that couldn't run in this containerized environment.
+See the comprehensive handoff prompt in [HANDOFF_PROMPT.md](HANDOFF_PROMPT.md) (generated below) for instructions on running environment-specific tests that couldn't run in this containerized environment.
 
 ## Limitations & Known Issues
 
