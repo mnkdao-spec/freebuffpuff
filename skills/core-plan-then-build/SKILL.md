@@ -7,14 +7,53 @@ metadata:
 
 # Plan, then build
 
-Skip for a one-line fix. Use when cross-cutting, live-service-touching, or ambiguous.
+Skip this for a one-line fix. Use it when the change is cross-cutting, touches a running
+service, or the request could mean two different things.
 
 ## Procedure
-1. **Read before writing** (read-only). 2. **State findings** with paths/lines; label inferences.
-3. **Write the plan**: Goal / Acceptance criteria / Files / Commands (baseline + after) /
-   Out of scope / Risks / Open questions. 4. Ask only about consequential ambiguity.
-5. **Wait for agreement** before touching live services, databases, tags, or paths.
-6. Implement in small checkable steps; hand off to `core-verify-loop`.
+1. **Read before writing.** Open the actual files: compose file, service configs, the code,
+   the existing tests. Read-only.
+2. **State what you found**, with file paths and line numbers. If a claim is an inference,
+   label it as one.
+3. **Write the plan** in this shape:
+
+```markdown
+## Goal
+One sentence, user-visible behaviour.
+
+## Acceptance criteria
+- [ ] observable, testable statement
+- [ ] observable, testable statement
+
+## Files to change
+- path - what changes and why
+
+## Commands to run
+- exact command (baseline) -> expected
+- exact command (after)    -> expected
+
+## Out of scope
+- what you will deliberately not touch
+
+## Risks / unknowns
+- what could break; what you could not determine
+
+## Open questions
+- anything that changes the plan if answered differently
+```
+
+4. **Ask only about consequential ambiguity.** If the choice is minor and reversible, state
+   the assumption and proceed.
+5. **Wait for agreement** before editing anything that touches a live service, a database,
+   tags, or file paths.
+6. Then implement in small, independently checkable steps and hand off to `core-verify-loop`.
+
+## Freebuff specifics
+- `/plan` in the TUI creates a plan; free-tier sessions are metered per hour, so spend the
+  first minutes reading rather than editing.
+- Batch your questions: one message, all of them.
+- If you're unsure whether a file is safe to touch, ask before touching it.
 
 ## Anti-pattern
-A plan without acceptance criteria can't be verified; without "out of scope" it grows silently.
+A plan that lists intentions without acceptance criteria cannot be verified later, and a
+plan with no "out of scope" section will quietly grow.

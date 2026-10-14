@@ -7,23 +7,40 @@ metadata:
 
 # Handoff and resume
 
-Context is a budget; sessions are capped. Files survive; conversations do not.
+Context is a budget and sessions are capped (Freebucks are spent per one-hour session).
+Files survive; conversations do not.
 
-## Files
-- `.agents/ops/taskboard.md` - in flight, one line per item
-- `.agents/ops/progress.md` - append-only: date, change, verification
-- `.agents/ops/decisions.md` - append-only: decision, why, ruled-out alternative
+## Files (created by the pack installer)
+- `.agents/ops/taskboard.md` - what is in flight, one line per item, with status
+- `.agents/ops/progress.md` - append-only log: date, what changed, what was verified
+- `.agents/ops/decisions.md` - append-only: decision, why, what it rules out
 
-Write at: session start (read board, mark in-flight); before risky edits; after verification
-(cmd + exit code); on approach choices; before context gets long / session ends.
+Write these at these moments:
+| Moment | Write |
+|---|---|
+| Start of session | read taskboard; put the current item in flight |
+| Before a risky edit | one line in progress.md: what you're about to try |
+| After verification | progress.md: the command and its exit code |
+| When you choose an approach over an alternative | decisions.md |
+| Before context gets long / session ending | taskboard + a "next step" line |
 
-## Resume
-1. Read taskboard + last ~30 lines of progress. 2. Re-run the last claimed-passing check
-   (don't trust the note; trust the command). 3. Continue from recorded next step.
+## Resume procedure
+1. Read `.agents/ops/taskboard.md` and the last ~30 lines of `progress.md`.
+2. Re-run the check that the last verified entry claims passed. Do not trust the note;
+   trust the command. (This catches work that was reverted or never committed.)
+3. Continue from the recorded next step, or say why the plan should change.
 
-## Handoff format
+## Handoff summary format
 ```
-STATE / DONE (with proving commands) / IN FLIGHT + next action / NEXT / BLOCKED / FILES
+STATE:     where things stand in one or two sentences
+DONE:      verified items, with the command that proved them
+IN FLEGHT: the current item and its exact next action
+NEXT:      the single next action someone else can pick up cold
+BLOCKED:   what needs a human decision, and the question to answer
+FILES:     paths touched, and whether they are committed
 ```
 
-- `progress.md` entries must include exit codes. Never record secrets in these files.
+## Notes specific to this setup
+- `progress.md` entries must include the exit code. "Ran the tests" is not an entry.
+- Never record secrets, API keys or vault contents in these files.
+- If you finish everything, say so explicitly - do not leave the board ambiguous.
