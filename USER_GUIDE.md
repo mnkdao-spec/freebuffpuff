@@ -50,7 +50,7 @@ For specific domains:
 
 ```bash
 # Clone the repository
-git clone https://github.com/freebuffpuff/freebuffpuff.git
+git clone https://github.com/mnkdao-spec/freebuffpuff.git
 cd freebuffpuff
 
 # Install to current directory
@@ -133,10 +133,10 @@ The pack includes 39 skills organized by domain. Each skill has a `SKILL.md` wit
 5 opt-in custom agents (Tier 3). Each agent is defined as a TypeScript file in `agents/*.ts` exporting a default agent object.
 
 Available agents:
-- `agents/cleanup.ts` - Cleanup operations
 - `agents/library-auditor.ts` - Music library auditing
-- `agents/release-notes-writer.ts` - Release notes generation
-- `agents/tech-writer.ts` - Technical writing assistance
+- `agents/proxmox-auditor.ts` - Proxmox host auditing
+- `agents/repo-cartographer.ts` - Repository mapping
+- `agents/site-qa.ts` - Static site QA
 - `agents/verifier.ts` - Verification and validation
 
 **Important Notes**:
@@ -155,11 +155,11 @@ All 8 executable scripts are read-only by design:
 | `skills/music-library-audit/scripts/lib-audit.sh` | Audit music library | 0=ok, 1=usage, 2=IO, 3=invalid arg |
 | `skills/music-navidrome-nsp-author/scripts/nsp-lint.sh` | Lint Navidrome `.nsp` files | 0=valid, 1=usage, 2=IO, 3=invalid JSON/schema |
 | `skills/music-musicbrainz-lookup/scripts/mb-lookup.sh` | MusicBrainz lookup with rate limiting | 0=ok, 1=usage, 2=network/IO, 3=not found |
-| `skills/proxmox-backup-and-restore/scripts/pve-backup-check.sh` | Verify backup configs | 0=ok, 2=IO, 3=config issue |
-| `skills/proxmox-host-health/scripts/pve-health.sh` | Host health checks | 0=ok, 2=IO, 3=issue |
-| `skills/proxmox-upgrade-safety/scripts/pve-precheck.sh` | Pre-upgrade validation | 0=ok, 2=IO, 3=blocked |
-| `skills/web-release-page/scripts/release-validate.sh` | Validate release metadata | 0=ok, 2=IO, 3=invalid |
-| `skills/web-site-architect/scripts/site-lint.sh` | Lint site structure | 0=ok, 2=IO, 3=invalid |
+| `skills/music-path-and-hardlink-doctor/scripts/compose-doctor.sh` | Flag compose mount/UID/GID/hardlink issues | 0=ok, 1=usage, 2=IO, 3=findings |
+| `skills/music-slskd-ops/scripts/slskd-doctor.sh` | Read-only slskd state via GETs | 0=ok, 1=usage, 2=network/IO |
+| `skills/proxmox-stack-map/scripts/pve-doctor.sh` | Whole-host audit (storage, pools, mounts, backups) | 0=ok, 1=usage, 2=IO, 3=findings |
+| `skills/proxmox-guest-placement/scripts/lxc-audit.sh` | One-container depth audit with backup consequences | 0=ok, 1=usage/strict-pass, 2=IO, 3=strict-findings |
+| `skills/web-perf-a11y/scripts/site-audit.sh` | Built-site audit (leaks, JSON-LD, links, budgets) | 0=ok, 1=usage, 2=IO, 3=blockers |
 
 All scripts:
 - Never write files unless explicitly called with `--out` to a new path (and `lib-audit` refuses directories)
