@@ -4,11 +4,13 @@
 # A 401/403/404 is reported per probe and is not fatal - endpoint availability varies by version.
 set -uo pipefail
 
+# Resolve a Python interpreter once. Windows and Git Bash often have `python` but not
+# `python3`; honours $PYTHON so you can force a specific one.
 if [ -z "${PY:-}" ]; then
   PY="${PYTHON:-}"
   [ -n "$PY" ] || PY="$(command -v "$PY" || command -v python || true)"
 fi
-if [ -z "$PY" ]; then echo "slskd-doctor: needs python (or set PYTHON=)." >&2; exit 2; fi
+if [ -z "$PY" ]; then echo "slskd-doctor: needs "$PY" (or python). Set PYTHON=/path/to/python." >&2; exit 2; fi
 BASE="${SLSKD_URL:-http://localhost:5030}"
 KEY="${SLSKD_API_KEY:-}"
 if [ -z "$KEY" ]; then
@@ -37,6 +39,9 @@ probe /api/v0/transfers/uploads   "upload transfer counts"
 echo
 echo "Interpretation (read-only, no changes made):"
 echo "  * /api/v0/server should show a connected/LoggedIn state. If not, the client is offline."
-echo "  * Nothing here proves your Soulseek listening port is reachable from outside."
-echo "  * Shares are PUBLIC. Confirm a dedicated folder, not /data, home or a whole drive."
-echo "  * If the web UI/API is exposed beyond localhost, report it to the human."
+echo "  * Nothing here proves your Soulseek listening port is reachable from outside. Search"
+echo "    results and browsing other users can be unreliable when that port is not forwarded,"
+echo "    and a misconfigured forward also affects downloads."
+echo "  * Shares are PUBLIC. Confirm you are sharing a dedicated folder and not /data, your home"
+echo "    directory or a whole drive."
+echo "  * If you exposed the web UI/API beyond localhost, that is a finding to report to the human."
