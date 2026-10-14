@@ -9,7 +9,7 @@ You are taking over verification of the freebuffpuff homelab pack on the user's 
 
 ## Context
 
-The pack is at: https://github.com/freebuffpuff/freebuffpuff
+The pack is at: https://github.com/mnkdao-spec/freebuffpuff
 Branch: main (after pushing)
 Location on user's machine: wherever they clone it
 
@@ -34,7 +34,7 @@ What could NOT be verified in sandbox (needs local machine):
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/freebuffpuff/freebuffpuff.git
+   git clone https://github.com/mnkdao-spec/freebuffpuff.git
    cd freebuffpuff
    ```
 
