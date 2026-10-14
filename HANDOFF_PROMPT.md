@@ -70,4 +70,63 @@ Test that skills are triggered appropriately by description matching. This is en
 
 Note: Results depend on your tier and runtime. Document what happens.
 
-### 3. Desktop vs Web Parity (Jnµ«b½
+### 3. Desktop vs Web Parity (If Both Available)
+
+If you use both Freebuff Desktop and Web:
+- Test the same agent/skill in both
+- Compare behavior
+- Note any discrepancies
+
+### 4. Proxmox Live Host Testing (HIGH RISK - Optional)
+
+ONLY if you have a non-production Proxmox host to test against. 
+READ ops/runbooks/proxmox.md FIRST.
+
+Never run destructive operations. Focus on read-only checks:
+- pve-health.sh against real host (if adapted to query your host)
+- pve-backup-check.sh against actual vzdump configs
+- pve-precheck.sh in dry-run mode
+
+If you don't have a Proxmox host, skip and note "not tested - no accessible host".
+
+### 5. Browser Rendering Tests
+
+For web skills:
+- Use web-site-architect to scaffold a minimal Astro site
+- Use web-release-page to create a sample release page
+- Render/preview if possible (npm run dev/build)
+- ferify structured data is valid
+- Check Core Web Vitals guidance is applicable
+
+### 6. PKM Real-World Testing
+
+- Test obsidian-plugin-dev guidance against actual Obsidian plugin structure
+- Validate pkm-rag-design chunking with real note sizes
+- Test pkm-sync-choice against your actual sync provider (if using)
+- Note: "different plugin versions corrupt .obsidian" claim was softened - see if you can reproduce
+
+## Follow the User Checklist
+
+Complete everything in probe/USER-CHECKLIST.md:
+- [ ] Install in fresh location
+- [ ] Run all tests
+- [ ] Verify agents load
+- [ ] Check skill discovery
+- [ ] Desktop parity (if applicable)
+- [ ] Optional: Proxmox on live host (with extreme caution)
+- [ ] Optional: End-to-end web build
+
+## Report Back
+
+Return a concise report with:
+1. Environment: OS, shell (bash/zsh), Freebuff client (Desktop/Web/both), versions
+2. Baseline tests: all pass/fail
+3. Each of the 6 test areas: results, errors, observations
+4. Any discrepancies from sandbox behavior
+5. Recommendations/fixes if any issues found
+6. Updated probe/USER-CHECKLIST.md with your results (commit if changes)
+
+Do not modify the safety guarantees (read-only scripts). Do not weaken assertions just to pass.
+
+Start by cloning and running the baseline verification.
+```
