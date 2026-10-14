@@ -1,0 +1,17 @@
+# Anything the agent parses or a shell executes must keep LF endings.
+# Git for Windows defaults to core.autocrlf=true, which would otherwise rewrite these to CRLF
+# on checkout and break every script with "\r: command not found".
+* text=auto eol=lf
+
+*.sh    text eol=lf
+*.js    text eol=lf
+*.ts    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.d.ts  text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+*.png binary
+*.jpg binary
+*.wasm binary
